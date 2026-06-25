@@ -38,6 +38,12 @@ async def lifespan(app: FastAPI):
             logger.info("Adding webhook_secret column to projects table...")
             db_init.execute(text("ALTER TABLE projects ADD COLUMN webhook_secret VARCHAR"))
             db_init.commit()
+        if "ping_latency_ms" not in columns:
+            db_init.execute(text("ALTER TABLE projects ADD COLUMN ping_latency_ms INTEGER"))
+            db_init.commit()
+        if "ping_error_detail" not in columns:
+            db_init.execute(text("ALTER TABLE projects ADD COLUMN ping_error_detail VARCHAR"))
+            db_init.commit()
     except Exception as e:
         logger.error(f"Error checking/migrating projects table columns: {e}")
     finally:

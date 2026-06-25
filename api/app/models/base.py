@@ -29,6 +29,8 @@ class Project(Base):
     env_vars = Column(String, nullable=True)
     last_deployed = Column(DateTime, nullable=True)
     webhook_secret = Column(String, nullable=True)
+    ping_latency_ms = Column(Integer, nullable=True)
+    ping_error_detail = Column(String, nullable=True)
     
     domains = relationship("Domain", back_populates="project", cascade="all, delete-orphan")
     cron_jobs = relationship("CronJob", back_populates="project", cascade="all, delete-orphan")

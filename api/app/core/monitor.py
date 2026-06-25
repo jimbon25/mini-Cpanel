@@ -5,6 +5,7 @@ import logging
 import psutil
 import urllib.request
 import urllib.error
+import time
 from sqlalchemy.orm import Session
 from app.models.base import Project, ActivityLog
 from app.core.notifications import dispatch_notification
@@ -79,7 +80,7 @@ def is_service_running(provider: str, name: str) -> bool:
         logger.error(f"Error checking health for service {name} ({provider}): {e}")
         return True 
 
-def ping_project_http(project: Project) -> tuple[bool, str]:
+def ping_project_http(project: Project) -> tuple[bool, str, int | None]:
     url = None
     if project.domains:
         url = f"http://{project.domains[0].domain_name}"
@@ -87,8 +88,9 @@ def ping_project_http(project: Project) -> tuple[bool, str]:
         url = f"http://127.0.0.1:{project.port}"
         
     if not url:
-        return True, "No port or domain configured"
+        return True, "No port or domain configured", None
         
+    start_time = time.perf_counter()
     try:
         req = urllib.request.Request(
             url, 
@@ -96,17 +98,21 @@ def ping_project_http(project: Project) -> tuple[bool, str]:
         )
         with urllib.request.urlopen(req, timeout=5) as response:
             status_code = response.getcode()
+            latency = int((time.perf_counter() - start_time) * 1000)
             if status_code >= 500:
-                return False, f"HTTP {status_code}"
-            return True, ""
+                return False, f"HTTP {status_code}", latency
+            return True, "", latency
     except urllib.error.HTTPError as he:
+        latency = int((time.perf_counter() - start_time) * 1000)
         if he.code >= 500:
-            return False, f"HTTP {he.code}"
-        return True, ""
+            return False, f"HTTP {he.code}", latency
+        return True, "", latency
     except urllib.error.URLError as ue:
-        return False, f"Connection failed: {ue.reason}"
+        latency = int((time.perf_counter() - start_time) * 1000)
+        return False, f"Connection failed: {ue.reason}", latency
     except Exception as e:
-        return False, f"Error: {str(e)}"
+        latency = int((time.perf_counter() - start_time) * 1000)
+        return False, f"Error: {str(e)}", latency
 
 def check_services_health(db: Session):
     projects = db.query(Project).all()
@@ -117,6 +123,8 @@ def check_services_health(db: Session):
         if proj.status == "online" and not running:
             logger.warning(f"Project '{proj.name}' was marked online but is NOT running! Updating status to failed.")
             proj.status = "failed"
+            proj.ping_latency_ms = None
+            proj.ping_error_detail = "Process/Service not running in background"
             db.commit()
             
             log_entry = ActivityLog(
@@ -131,10 +139,12 @@ def check_services_health(db: Session):
             dispatch_notification(db, alert_msg)
             
         elif proj.status in ("failed", "offline") and running:
-            is_healthy, _ = ping_project_http(proj)
+            is_healthy, err_detail, latency = ping_project_http(proj)
             if is_healthy:
                 logger.info(f"Service '{proj.name}' is running and responsive via HTTP. Restoring status to online.")
                 proj.status = "online"
+                proj.ping_latency_ms = latency
+                proj.ping_error_detail = None
                 http_failures[proj.id] = 0
                 db.commit()
                 
@@ -145,9 +155,13 @@ def check_services_health(db: Session):
                 )
                 db.add(log_entry)
                 db.commit()
+            else:
+                proj.ping_latency_ms = latency
+                proj.ping_error_detail = err_detail
+                db.commit()
                 
         elif running and proj.status == "online":
-            is_healthy, err_detail = ping_project_http(proj)
+            is_healthy, err_detail, latency = ping_project_http(proj)
             if not is_healthy:
                 failures = http_failures.get(proj.id, 0) + 1
                 http_failures[proj.id] = failures
@@ -156,6 +170,8 @@ def check_services_health(db: Session):
                 if failures >= 3:
                     logger.error(f"HTTP ping failed 3 times for project '{proj.name}'. Marking failed.")
                     proj.status = "failed"
+                    proj.ping_latency_ms = latency
+                    proj.ping_error_detail = err_detail
                     db.commit()
                     
                     log_entry = ActivityLog(
@@ -171,6 +187,15 @@ def check_services_health(db: Session):
             else:
                 if proj.id in http_failures:
                     http_failures[proj.id] = 0
+                proj.ping_latency_ms = latency
+                proj.ping_error_detail = None
+                db.commit()
+                
+        elif not running and proj.status == "failed":
+            if proj.ping_error_detail != "Process/Service not running in background":
+                proj.ping_latency_ms = None
+                proj.ping_error_detail = "Process/Service not running in background"
+                db.commit()
 
 def check_system_thresholds(db: Session):
     """

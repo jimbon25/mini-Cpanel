@@ -68,6 +68,8 @@ class ProjectResponse(ProjectBase):
     status: str
     last_deployed: Optional[datetime] = None
     webhook_secret: Optional[str] = None
+    ping_latency_ms: Optional[int] = None
+    ping_error_detail: Optional[str] = None
     domains: List[DomainResponse] = []
     cron_jobs: List[CronJobResponse] = []
 

@@ -25,6 +25,8 @@ export interface Project {
   last_deployed: string | null;
   webhook_secret: string | null;
   domains: DomainResponse[];
+  ping_latency_ms: number | null;
+  ping_error_detail: string | null;
 }
 
 interface ProjectsTabProps {
@@ -362,6 +364,12 @@ export default function ProjectsTab({
                       <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">[ {project.provider} ]</span>
                     </div>
                     <div className="flex items-center gap-1.5 select-none">
+                      {isOnline && project.ping_latency_ms !== null && (
+                        <span className="text-[9px] font-mono text-cobalt bg-cobalt/5 border border-cobalt/20 rounded px-1.5 py-0.5" data-testid={`latency-${project.name}`}>
+                          ⚡ {project.ping_latency_ms}ms
+                        </span>
+                      )}
+                      
                       <span
                         className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded tracking-wider border uppercase select-none ${
                           isOnline
@@ -375,6 +383,17 @@ export default function ProjectsTab({
                       >
                         {project.status}
                       </span>
+
+                      {isFailed && (
+                        <div className="relative group flex items-center justify-center cursor-help" data-testid={`error-warn-${project.name}`}>
+                          <span className="text-[11px] select-none filter hover:brightness-110 active:scale-95 transition-all">⚠️</span>
+                          {project.ping_error_detail && (
+                            <div className="absolute bottom-full right-0 mb-1.5 hidden group-hover:block z-30 bg-neutral-950 dark:bg-neutral-800 border border-neutral-800 dark:border-neutral-700 text-white dark:text-neutral-200 text-[9px] font-mono px-2 py-1 rounded shadow-xl whitespace-nowrap">
+                              {project.ping_error_detail}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       
                       <button
                         type="button"
