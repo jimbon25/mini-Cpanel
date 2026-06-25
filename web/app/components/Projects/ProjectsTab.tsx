@@ -363,10 +363,13 @@ export default function ProjectsTab({
                       <h3 className="text-sm font-bold tracking-tight text-foreground font-mono truncate max-w-37.5 md:max-w-50">{project.name}</h3>
                       <span className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">[ {project.provider} ]</span>
                     </div>
-                    <div className="flex items-center gap-1.5 select-none">
+                     <div className="flex items-center gap-1.5 select-none">
                       {isOnline && project.ping_latency_ms !== null && (
-                        <span className="text-[9px] font-mono text-cobalt bg-cobalt/5 border border-cobalt/20 rounded px-1.5 py-0.5" data-testid={`latency-${project.name}`}>
-                          ⚡ {project.ping_latency_ms}ms
+                        <span className="text-[9px] font-mono text-cobalt bg-cobalt/5 border border-cobalt/20 rounded px-1.5 py-0.5 flex items-center gap-0.5" data-testid={`latency-${project.name}`}>
+                          <svg className="w-2.5 h-2.5 text-cobalt shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          {project.ping_latency_ms}ms
                         </span>
                       )}
                       
@@ -386,7 +389,11 @@ export default function ProjectsTab({
 
                       {isFailed && (
                         <div className="relative group flex items-center justify-center cursor-help" data-testid={`error-warn-${project.name}`}>
-                          <span className="text-[11px] select-none filter hover:brightness-110 active:scale-95 transition-all">⚠️</span>
+                          <span className="flex items-center justify-center select-none filter hover:brightness-110 active:scale-95 transition-all text-red-500">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                          </span>
                           {project.ping_error_detail && (
                             <div className="absolute bottom-full right-0 mb-1.5 hidden group-hover:block z-30 bg-neutral-950 dark:bg-neutral-800 border border-neutral-800 dark:border-neutral-700 text-white dark:text-neutral-200 text-[9px] font-mono px-2 py-1 rounded shadow-xl whitespace-nowrap">
                               {project.ping_error_detail}
@@ -481,7 +488,12 @@ export default function ProjectsTab({
                   {/* Domains Mapping Section inside collapsible <details> */}
                   <details className="group border-t border-neutral-200/30 dark:border-neutral-800/30 pt-2 mt-1">
                     <summary className="text-[10px] text-neutral-400 font-mono tracking-wider uppercase cursor-pointer list-none flex justify-between items-center select-none hover:text-foreground">
-                      <span className="flex items-center gap-1">🌐 Domains ({project.domains?.length || 0})</span>
+                      <span className="flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-current shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-.778.099-1.533.284-2.253" />
+                        </svg>
+                        Domains ({project.domains?.length || 0})
+                      </span>
                       <span className="text-[8px] font-mono border border-neutral-200 dark:border-neutral-800/60 px-1 py-0.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 select-none">TOGGLE</span>
                     </summary>
                     <div className="flex flex-col gap-2 mt-2" data-testid={`domains-section-${project.name}`}>
@@ -541,16 +553,22 @@ export default function ProjectsTab({
                                       className="text-[8px] font-mono text-cobalt flex items-center gap-1 font-bold"
                                       data-testid={`ssl-badge-${dom.domain_name}`}
                                     >
-                                      🔒 SSL ACTIVE — {expiryDays} DAYS
+                                      <svg className="w-3 h-3 text-cobalt shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                                      </svg>
+                                      SSL ACTIVE — {expiryDays} DAYS
                                     </span>
                                   ) : (
                                     <button
                                       type="button"
                                       onClick={() => handleRequestSSL(project.id, dom.id)}
-                                      className="text-[8px] font-mono text-neutral-400 hover:text-cobalt hover:underline text-left mt-0.5"
+                                      className="text-[8px] font-mono text-neutral-400 hover:text-cobalt flex items-center gap-1 hover:underline text-left mt-0.5"
                                       data-testid={`btn-enable-ssl-${dom.domain_name}`}
                                     >
-                                      🔐 ENABLE SSL
+                                      <svg className="w-3.5 h-3.5 text-current shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 10.5V6.75a4.5 4.5 0 119 0v3.75M3.75 21.75h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H3.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                                      </svg>
+                                      ENABLE SSL
                                     </button>
                                   )}
                                 </div>
@@ -575,7 +593,12 @@ export default function ProjectsTab({
                   {project.git_repo && (
                     <details className="group border-t border-neutral-200/30 dark:border-neutral-800/30 pt-2 mt-1.5">
                       <summary className="text-[10px] text-neutral-400 font-mono tracking-wider uppercase cursor-pointer list-none flex justify-between items-center select-none hover:text-foreground">
-                        <span className="flex items-center gap-1">🤖 Git Webhook ({project.webhook_secret ? "Active" : "Disabled"})</span>
+                        <span className="flex items-center gap-1.5">
+                          <svg className="w-3.5 h-3.5 text-current shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
+                          </svg>
+                          Git Webhook ({project.webhook_secret ? "Active" : "Disabled"})
+                        </span>
                         <span className="text-[8px] font-mono border border-neutral-200 dark:border-neutral-800/60 px-1 py-0.5 rounded hover:bg-neutral-100 dark:hover:bg-neutral-900 select-none">TOGGLE</span>
                       </summary>
                       <div className="flex flex-col gap-2 mt-2 font-mono text-[10px]" data-testid={`webhook-section-${project.name}`}>
