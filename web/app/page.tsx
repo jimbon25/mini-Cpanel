@@ -241,19 +241,6 @@ export default function App() {
         setCpuHistory((prev) => [...prev, data.cpu.percent].slice(-20));
         setMemHistory((prev) => [...prev, data.memory.percent].slice(-20));
         setDiskHistory((prev) => [...prev, data.disk.percent].slice(-20));
-
-        // Fetch Ingress Traffic Stats
-        try {
-          const tResponse = await fetch("http://localhost:8080/api/v1/system/traffic", {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (tResponse.ok) {
-            const tData = await tResponse.json();
-            setTraffic(tData);
-          }
-        } catch (tErr) {
-          console.error("Failed to fetch traffic stats:", tErr);
-        }
       } catch (err) {
         setAgentStatus("offline");
         const msg = err instanceof Error ? err.message : "Failed to fetch metrics";
@@ -273,6 +260,59 @@ export default function App() {
       if (uptimeRef.current) clearInterval(uptimeRef.current);
     };
   }, [token, handleLogout, addLog]);
+
+  useEffect(() => {
+    if (!token) {
+      const timer = setTimeout(() => {
+        setTraffic(null);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let isComponentMounted = true;
+
+    const connect = () => {
+      if (!isComponentMounted) return;
+
+      const wsUrl = `ws://localhost:8080/api/v1/system/traffic/ws?token=${encodeURIComponent(token)}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (isComponentMounted) {
+            setTraffic(data);
+          }
+        } catch (err) {
+          console.error("Error parsing traffic WebSocket data:", err);
+        }
+      };
+
+      ws.onerror = (err) => {
+        console.error("Traffic WebSocket error:", err);
+      };
+
+      ws.onclose = () => {
+        if (isComponentMounted) {
+          reconnectTimeout = setTimeout(connect, 5000);
+        }
+      };
+    };
+
+    connect();
+
+    return () => {
+      isComponentMounted = false;
+      if (ws) {
+        ws.close();
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, [token]);
 
   interface ActivityLogItem {
     id: string;

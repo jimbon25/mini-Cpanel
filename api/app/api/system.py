@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
+import asyncio
+import logging
 from app.api.dependencies import get_current_user, RoleChecker
 from app.core.database import get_db
 from app.core.system import get_system_metrics
 from app.core.proxy_monitor import get_ingress_traffic_stats
 from app.models.base import User, SystemSetting, ActivityLog
 from app.schemas.system import SystemSettingsResponse, SystemSettingsUpdate
+from app.core.config import settings
 
+logger = logging.getLogger("cpanel_lite.system")
 router = APIRouter()
 
 @router.get("/metrics")
@@ -89,3 +93,40 @@ def get_activity_logs(
         }
         for log in logs
     ]
+
+
+@router.websocket("/traffic/ws")
+async def traffic_ws(
+    websocket: WebSocket,
+    token: str,
+    db: Session = Depends(get_db)
+):
+    await websocket.accept()
+    try:
+        from jose import jwt
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+        user = db.query(User).filter(User.username == username).first()
+        if not user:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    except Exception:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        while True:
+            stats = get_ingress_traffic_stats(db)
+            await websocket.send_json(stats)
+            await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.error(f"Error in traffic WebSocket: {e}", exc_info=True)
+        try:
+            await websocket.close()
+        except Exception:
+            pass
