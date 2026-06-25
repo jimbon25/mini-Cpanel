@@ -3,6 +3,8 @@ import shutil
 import subprocess
 import logging
 import psutil
+import urllib.request
+import urllib.error
 from sqlalchemy.orm import Session
 from app.models.base import Project, ActivityLog
 from app.core.notifications import dispatch_notification
@@ -11,6 +13,7 @@ logger = logging.getLogger("cpanel_lite.monitor")
 
 cpu_breach_count = 0
 ram_breach_count = 0
+http_failures = {}
 
 def is_service_running(provider: str, name: str) -> bool:
     """
@@ -26,7 +29,7 @@ def is_service_running(provider: str, name: str) -> bool:
                     timeout=5
                 )
                 return "true" in result.stdout.strip().lower()
-            return True
+            return True 
             
         elif provider == "systemd":
             if shutil.which("systemctl"):
@@ -69,24 +72,50 @@ def is_service_running(provider: str, name: str) -> bool:
                     timeout=5
                 )
                 return "SERVICE_RUNNING" in result.stdout
-            return True
+            return True 
             
         return True
     except Exception as e:
         logger.error(f"Error checking health for service {name} ({provider}): {e}")
-        return True
+        return True 
+
+def ping_project_http(project: Project) -> tuple[bool, str]:
+    url = None
+    if project.domains:
+        url = f"http://{project.domains[0].domain_name}"
+    elif project.port:
+        url = f"http://127.0.0.1:{project.port}"
+        
+    if not url:
+        return True, "No port or domain configured"
+        
+    try:
+        req = urllib.request.Request(
+            url, 
+            headers={'User-Agent': 'mini-cPanel-Uptime-Monitor/1.0'}
+        )
+        with urllib.request.urlopen(req, timeout=5) as response:
+            status_code = response.getcode()
+            if status_code >= 500:
+                return False, f"HTTP {status_code}"
+            return True, ""
+    except urllib.error.HTTPError as he:
+        if he.code >= 500:
+            return False, f"HTTP {he.code}"
+        return True, ""
+    except urllib.error.URLError as ue:
+        return False, f"Connection failed: {ue.reason}"
+    except Exception as e:
+        return False, f"Error: {str(e)}"
 
 def check_services_health(db: Session):
-    """
-    Scans all projects in database and synchronizes their status with the OS runner.
-    """
     projects = db.query(Project).all()
     
     for proj in projects:
         running = is_service_running(proj.provider, proj.name)
+        
         if proj.status == "online" and not running:
             logger.warning(f"Project '{proj.name}' was marked online but is NOT running! Updating status to failed.")
-            
             proj.status = "failed"
             db.commit()
             
@@ -102,18 +131,46 @@ def check_services_health(db: Session):
             dispatch_notification(db, alert_msg)
             
         elif proj.status in ("failed", "offline") and running:
-            logger.info(f"Project '{proj.name}' was marked {proj.status} but is running in background. Restoring status to online.")
-            
-            proj.status = "online"
-            db.commit()
-            
-            log_entry = ActivityLog(
-                project_id=proj.id,
-                event_type="info",
-                message=f"Service '{proj.name}' is active and running in the background."
-            )
-            db.add(log_entry)
-            db.commit()
+            is_healthy, _ = ping_project_http(proj)
+            if is_healthy:
+                logger.info(f"Service '{proj.name}' is running and responsive via HTTP. Restoring status to online.")
+                proj.status = "online"
+                http_failures[proj.id] = 0
+                db.commit()
+                
+                log_entry = ActivityLog(
+                    project_id=proj.id,
+                    event_type="info",
+                    message=f"Service '{proj.name}' is active and responsive via HTTP."
+                )
+                db.add(log_entry)
+                db.commit()
+                
+        elif running and proj.status == "online":
+            is_healthy, err_detail = ping_project_http(proj)
+            if not is_healthy:
+                failures = http_failures.get(proj.id, 0) + 1
+                http_failures[proj.id] = failures
+                logger.warning(f"HTTP ping failed for project '{proj.name}' ({failures}/3): {err_detail}")
+                
+                if failures >= 3:
+                    logger.error(f"HTTP ping failed 3 times for project '{proj.name}'. Marking failed.")
+                    proj.status = "failed"
+                    db.commit()
+                    
+                    log_entry = ActivityLog(
+                        project_id=proj.id,
+                        event_type="error",
+                        message=f"HTTP Ping failed: {err_detail}. Web server is unresponsive."
+                    )
+                    db.add(log_entry)
+                    db.commit()
+                    
+                    alert_msg = f"🚨 [cPanel-Lite Alert] Project '{proj.name}' is running as a process, but HTTP ping is failing (Status: {err_detail})!"
+                    dispatch_notification(db, alert_msg)
+            else:
+                if proj.id in http_failures:
+                    http_failures[proj.id] = 0
 
 def check_system_thresholds(db: Session):
     """
@@ -136,6 +193,7 @@ def check_system_thresholds(db: Session):
     except Exception as e:
         logger.error(f"Failed to check CPU threshold: {e}")
         
+    # 2. Check RAM
     try:
         mem = psutil.virtual_memory()
         ram_percent = mem.percent
