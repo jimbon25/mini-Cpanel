@@ -1,0 +1,18 @@
+[Unit]
+Description=Mini cPanel FastAPI Backend Service
+After=network.target
+
+[Service]
+User=yourusername
+WorkingDirectory=/home/yourusername/mini-cpanel/api
+ExecStart=/home/yourusername/mini-cpanel/api/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080
+Restart=always
+
+# Environment Variables
+Environment="CPANEL_SECRET_KEY=your-production-secret-key-change-me"
+Environment="CPANEL_BACKEND_CORS_ORIGINS=https://cpanel.yourdomain.com"
+Environment="CPANEL_DATA_DIR=/home/yourusername/.minicpanel"
+Environment="CPANEL_APPS_DIR=/home/yourusername/apps"
+
+[Install]
+WantedBy=multi-user.target

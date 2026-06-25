@@ -1,0 +1,105 @@
+# Python
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Python Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+/api/.venv/
+
+# SQLite Databases & Local Storage
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite3
+/api/app/core/cpanel_lite.db
+/api/cpanel_lite.db
+/api/app/core/minicpanel.db
+/api/minicpanel.db
+.minicpanel/
+.cpanel_lite/
+
+# Credentials & Secrets
+credentials.json
+token.json
+token.pickle
+*.pem
+*.key
+*.crt
+
+# Backups & Archives
+*.zip
+*.tar.gz
+*.tgz
+*.rar
+*.7z
+/api/backups/
+/api/remote_storage/
+
+# Node.js
+node_modules/
+/web/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Next.js
+.next/
+/web/.next/
+out/
+/web/out/
+
+# Environment Variables (Keep templates, ignore actual secrets)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.tsbuildinfo
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# Logs, Cache & Test Coverage
+*.log
+logs/
+.coverage
+htmlcov/
+coverage.xml
+.cache/
