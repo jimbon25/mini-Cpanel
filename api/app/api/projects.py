@@ -63,6 +63,7 @@ def create_project(
         branch=payload.branch,
         port=payload.port,
         env_vars=payload.env_vars,
+        enable_http_ping=payload.enable_http_ping,
         status="offline"
     )
     db.add(project)
@@ -397,10 +398,25 @@ async def websocket_logs_stream(
             
         if project.provider == "systemd":
             await websocket.send_text(f"[Systemd] Reading journalctl logs for {project.name}.service...")
+            import os
+            is_root = (os.geteuid() == 0)
+            journal_cmd = ["journalctl"]
+            if not is_root:
+                journal_cmd.append("--user")
+            journal_cmd.extend(["-u", f"{project.name}.service", "-f", "-n", "30"])
+            
+            cmd_env = os.environ.copy()
+            if not is_root and "XDG_RUNTIME_DIR" not in cmd_env:
+                uid = os.getuid()
+                runtime_dir = f"/run/user/{uid}"
+                if os.path.exists(runtime_dir):
+                    cmd_env["XDG_RUNTIME_DIR"] = runtime_dir
+            
             proc = await asyncio.create_subprocess_exec(
-                "journalctl", "-u", f"{project.name}.service", "-f", "-n", "30",
+                *journal_cmd,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=cmd_env
             )
             try:
                 while True:
