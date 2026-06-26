@@ -10,6 +10,7 @@ from app.models.base import Project, User, ActivityLog, Domain, CronJob, Deploym
 from app.schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, DomainResponse, DomainBase, CronJobCreate, CronJobUpdate, CronJobResponse, DeploymentResponse
 from app.api.dependencies import get_current_user, RoleChecker
 from app.core.deployment import deploy_project_task, start_service, stop_service, log_activity, cleanup_project_service
+from app.core.broadcaster import deployment_broadcaster
 from app.core.ssl import issue_ssl_certificate
 
 router = APIRouter()
@@ -724,3 +725,59 @@ def get_project_deployment_details(
     return deployment
 
 
+@router.websocket("/{project_id}/deployments/{deployment_id}/stream")
+async def websocket_deployment_logs_stream(
+    websocket: WebSocket,
+    project_id: str,
+    deployment_id: str,
+    token: str = Query(...)
+):
+    db = SessionLocal()
+    try:
+        is_authenticated = get_websocket_user(token, db)
+    finally:
+        db.close()
+
+    if not is_authenticated:
+        await websocket.close(code=1008)
+        return
+
+    await websocket.accept()
+
+    is_active = False
+    for _ in range(30):
+        async with deployment_broadcaster.lock:
+            if deployment_id in deployment_broadcaster.active_logs:
+                is_active = True
+                break
+        await asyncio.sleep(0.5)
+
+    if is_active:
+        try:
+            buffer = await deployment_broadcaster.subscribe(deployment_id, websocket)
+            for line in buffer:
+                await websocket.send_text(line)
+
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await deployment_broadcaster.unsubscribe(deployment_id, websocket)
+    else:
+        db = SessionLocal()
+        try:
+            deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
+            if deployment and deployment.build_logs:
+                for line in deployment.build_logs.split("\n"):
+                    await websocket.send_text(line)
+            else:
+                await websocket.send_text("[System] No active or historical deployment logs found.")
+        except Exception as e:
+            try:
+                await websocket.send_text(f"[System] Error fetching logs: {str(e)}")
+            except Exception:
+                pass
+        finally:
+            db.close()
+        await websocket.close()

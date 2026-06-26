@@ -10,6 +10,7 @@ interface ConfigureProjectModalProps {
     branch: string;
     port: number | null;
     env_vars: string | null;
+    enable_http_ping: boolean;
   }) => void;
 }
 
@@ -29,6 +30,7 @@ export default function ConfigureProjectModal({
   const [projBranch, setProjBranch] = useState("main");
   const [projPort, setProjPort] = useState("");
   const [projStartCommand, setProjStartCommand] = useState("");
+  const [enableHttpPing, setEnableHttpPing] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
   const [showEnvVars, setShowEnvVars] = useState(false);
   const [envVars, setEnvVars] = useState<EnvVarRow[]>([{ key: "", value: "" }]);
@@ -56,6 +58,7 @@ export default function ConfigureProjectModal({
       branch: projBranch || "main",
       port: projPort ? parseInt(projPort, 10) : null,
       env_vars: envString || null,
+      enable_http_ping: enableHttpPing,
     });
 
     setProjName("");
@@ -64,6 +67,7 @@ export default function ConfigureProjectModal({
     setProjBranch("main");
     setProjPort("");
     setProjStartCommand("");
+    setEnableHttpPing(true);
     setShowHelp(false);
     setShowEnvVars(false);
     setEnvVars([{ key: "", value: "" }]);
@@ -199,6 +203,24 @@ export default function ConfigureProjectModal({
                 data-testid="input-proj-port"
               />
             </div>
+          </div>
+
+          <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded p-3">
+            <div>
+              <p className="text-xs text-white font-mono">Enable HTTP Health Check</p>
+              <p className="text-[10px] text-neutral-500 mt-0.5">Disable for bots, workers, or services without a web server</p>
+            </div>
+            <button
+              type="button"
+              id="toggle-enable-http-ping"
+              onClick={() => setEnableHttpPing(!enableHttpPing)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${enableHttpPing ? "bg-cobalt" : "bg-neutral-700"}`}
+              data-testid="toggle-http-ping"
+            >
+              <span
+                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${enableHttpPing ? "translate-x-4.5" : "translate-x-0.5"}`}
+              />
+            </button>
           </div>
 
           <div className="flex flex-col gap-1.5">

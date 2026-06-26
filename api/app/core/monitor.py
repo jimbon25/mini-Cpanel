@@ -139,6 +139,13 @@ def check_services_health(db: Session):
             dispatch_notification(db, alert_msg)
             
         elif proj.status in ("failed", "offline") and running:
+            if not proj.enable_http_ping:
+                proj.status = "online"
+                proj.ping_latency_ms = None
+                proj.ping_error_detail = None
+                http_failures[proj.id] = 0
+                db.commit()
+                continue
             is_healthy, err_detail, latency = ping_project_http(proj)
             if is_healthy:
                 logger.info(f"Service '{proj.name}' is running and responsive via HTTP. Restoring status to online.")
@@ -161,6 +168,13 @@ def check_services_health(db: Session):
                 db.commit()
                 
         elif running and proj.status == "online":
+            if not proj.enable_http_ping:
+                proj.ping_latency_ms = None
+                proj.ping_error_detail = None
+                if proj.id in http_failures:
+                    http_failures[proj.id] = 0
+                db.commit()
+                continue
             is_healthy, err_detail, latency = ping_project_http(proj)
             if not is_healthy:
                 failures = http_failures.get(proj.id, 0) + 1

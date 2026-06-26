@@ -25,6 +25,7 @@ class ProjectBase(BaseModel):
     branch: Optional[str] = "main"
     port: Optional[int] = None
     env_vars: Optional[str] = None
+    enable_http_ping: Optional[bool] = True
 
 class ProjectCreate(ProjectBase):
     pass
@@ -37,6 +38,7 @@ class ProjectUpdate(BaseModel):
     port: Optional[int] = None
     env_vars: Optional[str] = None
     status: Optional[str] = None
+    enable_http_ping: Optional[bool] = None
 
 class CronJobBase(BaseModel):
     name: str
@@ -70,6 +72,7 @@ class ProjectResponse(ProjectBase):
     webhook_secret: Optional[str] = None
     ping_latency_ms: Optional[int] = None
     ping_error_detail: Optional[str] = None
+    enable_http_ping: bool = True
     domains: List[DomainResponse] = []
     cron_jobs: List[CronJobResponse] = []
 

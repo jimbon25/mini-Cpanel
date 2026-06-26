@@ -27,6 +27,7 @@ export interface Project {
   domains: DomainResponse[];
   ping_latency_ms: number | null;
   ping_error_detail: string | null;
+  enable_http_ping: boolean;
 }
 
 interface ProjectsTabProps {
@@ -86,6 +87,7 @@ export default function ProjectsTab({
     branch: string;
     port: number | null;
     env_vars: string | null;
+    enable_http_ping: boolean;
   }) => {
     try {
       const response = await fetch("http://localhost:8080/api/v1/projects", {

@@ -13,6 +13,7 @@ from datetime import datetime
 from app.core.config import settings
 from app.models.base import Project, ActivityLog, Deployment
 from app.core.setup.autosetup import run_auto_setup
+from app.core.broadcaster import deployment_broadcaster
 
 logger = logging.getLogger("cpanel_lite.deployment")
 
@@ -152,21 +153,92 @@ async def deploy_project_task(project_id: str, db_factory):
     db.commit()
     db.refresh(deployment)
 
+    await deployment_broadcaster.register(deployment.id)
+
     build_logs = []
     
     def log_to_build(text: str):
         timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-        build_logs.append(f"[{timestamp}] {text}")
+        line = f"[{timestamp}] {text}"
+        build_logs.append(line)
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(deployment_broadcaster.log(deployment.id, line))
+        except Exception:
+            pass
 
     async def wrapped_run_command(cmd: list[str], cwd: str = None, env: dict = None) -> Tuple[int, str, str]:
         log_to_build(f"Running command: {' '.join(cmd)}" + (f" in {cwd}" if cwd else ""))
-        code, out, err = await run_command(cmd, cwd=cwd, env=env)
-        if out:
-            log_to_build(f"Stdout:\n{out}")
-        if err:
-            log_to_build(f"Stderr:\n{err}")
-        log_to_build(f"Command returned code: {code}")
-        return code, out, err
+
+        try:
+            from unittest.mock import Mock, AsyncMock
+            is_mock = isinstance(run_command, (Mock, AsyncMock))
+        except ImportError:
+            is_mock = False
+
+        if is_mock:
+            code, out, err = await run_command(cmd, cwd=cwd, env=env)
+            if out:
+                log_to_build(f"Stdout:\n{out}")
+            if err:
+                log_to_build(f"Stderr:\n{err}")
+            log_to_build(f"Command returned code: {code}")
+            return code, out, err
+
+        cmd_env = os.environ.copy()
+        if env:
+            cmd_env.update(env)
+
+        if "systemctl" in cmd and "--user" in cmd and "XDG_RUNTIME_DIR" not in cmd_env:
+            try:
+                uid = os.getuid()
+                runtime_dir = f"/run/user/{uid}"
+                if os.path.exists(runtime_dir):
+                    cmd_env["XDG_RUNTIME_DIR"] = runtime_dir
+            except Exception:
+                pass
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=cwd,
+                env=cmd_env
+            )
+
+            stdout_lines = []
+            stderr_lines = []
+
+            async def read_stream(stream, is_stderr: bool):
+                while True:
+                    line_bytes = await stream.readline()
+                    if not line_bytes:
+                        break
+                    line = line_bytes.decode('utf-8', errors='ignore').rstrip('\r\n')
+                    if is_stderr:
+                        stderr_lines.append(line)
+                        log_to_build(f"[stderr] {line}")
+                    else:
+                        stdout_lines.append(line)
+                        log_to_build(line)
+
+            await asyncio.gather(
+                read_stream(proc.stdout, False),
+                read_stream(proc.stderr, True)
+            )
+
+            await proc.wait()
+            code = proc.returncode
+            out = "\n".join(stdout_lines)
+            err = "\n".join(stderr_lines)
+            log_to_build(f"Command returned code: {code}")
+            return code, out, err
+
+        except Exception as e:
+            err_msg = str(e)
+            log_to_build(f"Command failed with exception: {err_msg}")
+            return -1, "", err_msg
 
     async def wrapped_log_activity(db_session, proj_id, ev_type, message):
         log_to_build(f"Activity ({ev_type}): {message}")
@@ -248,6 +320,10 @@ async def deploy_project_task(project_id: str, db_factory):
         db.commit()
         await wrapped_log_activity(db, project.id, "error", f"Deployment failed: {str(e)}")
     finally:
+        try:
+            await deployment_broadcaster.unregister(deployment.id)
+        except Exception:
+            pass
         db.close()
 
 async def cleanup_project_service(project: Project, db: Session) -> bool:

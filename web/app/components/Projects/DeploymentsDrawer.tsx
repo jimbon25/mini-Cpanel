@@ -31,6 +31,7 @@ export default function DeploymentsDrawer({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null);
+  const [wsLogs, setWsLogs] = useState<string[]>([]);
   
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -93,30 +94,61 @@ export default function DeploymentsDrawer({
     };
   }, [isOpen, projectId, token, fetchDeployments]);
 
+  const selectedDepId = selectedDeployment?.id;
+  const selectedDepStatus = selectedDeployment?.status;
+  const isBuilding = selectedDepStatus === "building" || selectedDepStatus === "queued";
+
+  useEffect(() => {
+    if (!selectedDepId || !isBuilding || !token || !isOpen) {
+      return;
+    }
+
+    const wsUrl = `ws://localhost:8080/api/v1/projects/${projectId}/deployments/${selectedDepId}/stream?token=${encodeURIComponent(token)}`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onmessage = (event) => {
+      setWsLogs((prev) => [...prev, event.data]);
+    };
+
+    ws.onerror = (err) => {
+      console.error("Build logs WebSocket error:", err);
+    };
+
+    return () => {
+      setWsLogs([]);
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close();
+      }
+    };
+  }, [selectedDepId, isBuilding, token, projectId, isOpen]);
+
   useEffect(() => {
     if (selectedDeployment && isOpen) {
       terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [selectedDeployment?.build_logs, selectedDeployment, isOpen]);
+  }, [selectedDeployment?.build_logs, wsLogs, selectedDeployment, isOpen]);
 
   const handleClose = () => {
     setSelectedDeployment(null);
     onClose();
   };
 
+  const logsToRender = wsLogs.length > 0
+    ? wsLogs
+    : selectedDeployment?.build_logs
+      ? selectedDeployment.build_logs.split("\n")
+      : [];
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 flex justify-end z-50 bg-black/40 backdrop-blur-xs select-none">
-      {/* Click outside to close */}
       <div className="flex-1" onClick={handleClose} />
 
-      {/* Drawer Body */}
       <div 
         className="w-full max-w-xl bg-canvas-dark h-full border-l border-neutral-800 shadow-xl flex flex-col animate-slide-in text-xs"
         data-testid="deployments-drawer"
       >
-        {/* Header */}
         <header className="flex justify-between items-center p-4 border-b border-neutral-800 select-none">
           <div>
             <h2 className="text-xs font-mono font-bold text-neutral-400">DEPLOYMENT HISTORY</h2>
@@ -131,7 +163,6 @@ export default function DeploymentsDrawer({
           </button>
         </header>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-y-auto flex flex-col min-h-0 bg-neutral-950/10">
           {error && (
             <div className="p-4 text-xs text-red-500 font-mono border-b border-neutral-900 bg-red-500/5">
@@ -140,7 +171,6 @@ export default function DeploymentsDrawer({
           )}
 
           {!selectedDeployment ? (
-            // LIST VIEW
             <div className="p-4 flex flex-col gap-3 flex-1 overflow-y-auto select-none">
               {deployments.length === 0 ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-neutral-500 font-mono italic">
@@ -205,9 +235,7 @@ export default function DeploymentsDrawer({
               )}
             </div>
           ) : (
-            // LOGS VIEW
             <div className="flex-1 flex flex-col min-h-0">
-              {/* Logs Sub-header */}
               <div className="flex justify-between items-center px-4 py-2 border-b border-neutral-900 bg-neutral-950/20 text-neutral-400 font-mono text-[10px] select-none">
                 <button
                   onClick={() => setSelectedDeployment(null)}
@@ -231,7 +259,6 @@ export default function DeploymentsDrawer({
                 </div>
               </div>
 
-              {/* Commit info header in logs */}
               {selectedDeployment.commit_sha && (
                 <div className="px-4 py-2 border-b border-neutral-900 bg-neutral-900/10 text-neutral-300 font-mono text-[10px] flex flex-col gap-0.5 select-none">
                   <div>
@@ -251,16 +278,15 @@ export default function DeploymentsDrawer({
                 </div>
               )}
 
-              {/* Log Monospace Output */}
               <div className="flex-1 p-4 overflow-y-auto font-mono text-[11px] text-neutral-300 flex flex-col gap-1.5 select-text bg-neutral-950/40">
-                {!selectedDeployment.build_logs ? (
+                {logsToRender.length === 0 ? (
                   <div className="h-full flex items-center justify-center text-neutral-500 text-xs select-none">
                     {selectedDeployment.status === "building" || selectedDeployment.status === "queued"
                       ? "Build in progress... waiting for logs."
                       : "No logs recorded for this deployment."}
                   </div>
                 ) : (
-                  selectedDeployment.build_logs.split("\n").map((line, index) => {
+                  logsToRender.map((line, index) => {
                     const isCommand = line.includes("Running command:");
                     const isError = line.includes("Stderr:") || line.includes("Deployment failed") || line.includes("returned code: -1");
                     

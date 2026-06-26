@@ -31,6 +31,7 @@ class Project(Base):
     webhook_secret = Column(String, nullable=True)
     ping_latency_ms = Column(Integer, nullable=True)
     ping_error_detail = Column(String, nullable=True)
+    enable_http_ping = Column(Boolean, default=True, nullable=False, server_default="1")
     
     domains = relationship("Domain", back_populates="project", cascade="all, delete-orphan")
     cron_jobs = relationship("CronJob", back_populates="project", cascade="all, delete-orphan")
