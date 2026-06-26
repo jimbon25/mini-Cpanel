@@ -39,6 +39,52 @@ def find_available_port(start_port: int = 8000) -> int:
         port += 1
     raise RuntimeError("No available TCP ports found on host.")
 
+def is_systemd_user_service(service_name: str) -> bool:
+    """
+    Checks if a systemd service is a user service (i.e. resides in the user's config directory).
+    If it's in the system-wide systemd directories or if we run as root, returns False.
+    """
+    try:
+        if os.geteuid() == 0:
+            return False
+    except AttributeError:
+        pass
+
+    system_paths = [
+        Path(f"/etc/systemd/system/{service_name}"),
+        Path(f"/lib/systemd/system/{service_name}"),
+        Path(f"/usr/lib/systemd/system/{service_name}"),
+        Path(f"/etc/systemd/system/multi-user.target.wants/{service_name}")
+    ]
+    if any(p.exists() for p in system_paths):
+        return False
+
+    user_service_path = Path.home() / ".config" / "systemd" / "user" / service_name
+    if user_service_path.exists():
+        return True
+
+    return True
+
+def get_systemctl_cmd(service_name: str) -> list[str]:
+    """
+    Returns the appropriate systemctl command prefix for the given service.
+    If it is a system-wide service and we are not root, uses `sudo systemctl`.
+    Otherwise uses `systemctl --user` or `systemctl`.
+    """
+    is_root = False
+    try:
+        is_root = (os.geteuid() == 0)
+    except AttributeError:
+        pass
+
+    if is_root:
+        return ["systemctl"]
+
+    if is_systemd_user_service(service_name):
+        return ["systemctl", "--user"]
+    else:
+        return ["sudo", "systemctl"]
+
 async def run_command(cmd: list[str], cwd: str = None, env: dict = None) -> Tuple[int, str, str]:
     """
     Runs a shell command asynchronously and returns exit_code, stdout, stderr.
@@ -169,7 +215,7 @@ async def deploy_project_task(project_id: str, db_factory):
 
     async def wrapped_run_command(cmd: list[str], cwd: str = None, env: dict = None) -> Tuple[int, str, str]:
         log_to_build(f"Running command: {' '.join(cmd)}" + (f" in {cwd}" if cwd else ""))
-
+        
         try:
             from unittest.mock import Mock, AsyncMock
             is_mock = isinstance(run_command, (Mock, AsyncMock))
@@ -184,11 +230,11 @@ async def deploy_project_task(project_id: str, db_factory):
                 log_to_build(f"Stderr:\n{err}")
             log_to_build(f"Command returned code: {code}")
             return code, out, err
-
+        
         cmd_env = os.environ.copy()
         if env:
             cmd_env.update(env)
-
+            
         if "systemctl" in cmd and "--user" in cmd and "XDG_RUNTIME_DIR" not in cmd_env:
             try:
                 uid = os.getuid()
@@ -206,10 +252,10 @@ async def deploy_project_task(project_id: str, db_factory):
                 cwd=cwd,
                 env=cmd_env
             )
-
+            
             stdout_lines = []
             stderr_lines = []
-
+            
             async def read_stream(stream, is_stderr: bool):
                 while True:
                     line_bytes = await stream.readline()
@@ -227,14 +273,14 @@ async def deploy_project_task(project_id: str, db_factory):
                 read_stream(proc.stdout, False),
                 read_stream(proc.stderr, True)
             )
-
+            
             await proc.wait()
             code = proc.returncode
             out = "\n".join(stdout_lines)
             err = "\n".join(stderr_lines)
             log_to_build(f"Command returned code: {code}")
             return code, out, err
-
+            
         except Exception as e:
             err_msg = str(e)
             log_to_build(f"Command failed with exception: {err_msg}")
@@ -338,22 +384,26 @@ async def cleanup_project_service(project: Project, db: Session) -> bool:
                 await run_command(["docker", "rm", project.name])
         elif project.provider == "systemd":
             if shutil.which("systemctl"):
+                service_name = f"{project.name}.service"
+                cmd = get_systemctl_cmd(service_name)
+                await run_command(cmd + ["stop", service_name])
+                await run_command(cmd + ["disable", service_name])
+                
                 is_root = False
                 try:
                     is_root = (os.geteuid() == 0)
                 except AttributeError:
                     pass
-                cmd = ["systemctl"] if is_root else ["systemctl", "--user"]
-                await run_command(cmd + ["stop", f"{project.name}.service"])
-                await run_command(cmd + ["disable", f"{project.name}.service"])
-                
-                service_name = f"{project.name}.service"
+
                 if is_root:
                     service_path = Path(f"/etc/systemd/system/{service_name}")
+                    if service_path.exists():
+                        service_path.unlink()
                 else:
-                    service_path = Path.home() / ".config" / "systemd" / "user" / service_name
-                if service_path.exists():
-                    service_path.unlink()
+                    if is_systemd_user_service(service_name):
+                        service_path = Path.home() / ".config" / "systemd" / "user" / service_name
+                        if service_path.exists():
+                            service_path.unlink()
                 await run_command(cmd + ["daemon-reload"])
         elif project.provider == "windows":
             nssm_bin = shutil.which("nssm")
@@ -554,13 +604,9 @@ async def start_service(project: Project, db: Session) -> bool:
                     raise RuntimeError(err)
         elif project.provider == "systemd":
             if shutil.which("systemctl"):
-                is_root = False
-                try:
-                    is_root = (os.geteuid() == 0)
-                except AttributeError:
-                    pass
-                cmd = ["systemctl"] if is_root else ["systemctl", "--user"]
-                code, out, err = await run_command(cmd + ["start", f"{project.name}.service"])
+                service_name = f"{project.name}.service"
+                cmd = get_systemctl_cmd(service_name)
+                code, out, err = await run_command(cmd + ["start", service_name])
                 if code != 0:
                     raise RuntimeError(err)
         elif project.provider == "windows":
@@ -592,13 +638,9 @@ async def stop_service(project: Project, db: Session) -> bool:
                     raise RuntimeError(err)
         elif project.provider == "systemd":
             if shutil.which("systemctl"):
-                is_root = False
-                try:
-                    is_root = (os.geteuid() == 0)
-                except AttributeError:
-                    pass
-                cmd = ["systemctl"] if is_root else ["systemctl", "--user"]
-                code, out, err = await run_command(cmd + ["stop", f"{project.name}.service"])
+                service_name = f"{project.name}.service"
+                cmd = get_systemctl_cmd(service_name)
+                code, out, err = await run_command(cmd + ["stop", service_name])
                 if code != 0:
                     raise RuntimeError(err)
         elif project.provider == "windows":

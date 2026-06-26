@@ -399,14 +399,16 @@ async def websocket_logs_stream(
         if project.provider == "systemd":
             await websocket.send_text(f"[Systemd] Reading journalctl logs for {project.name}.service...")
             import os
+            from app.core.deployment import is_systemd_user_service
             is_root = (os.geteuid() == 0)
+            is_user = is_systemd_user_service(f"{project.name}.service")
             journal_cmd = ["journalctl"]
-            if not is_root:
+            if is_user:
                 journal_cmd.append("--user")
             journal_cmd.extend(["-u", f"{project.name}.service", "-f", "-n", "30"])
             
             cmd_env = os.environ.copy()
-            if not is_root and "XDG_RUNTIME_DIR" not in cmd_env:
+            if is_user and "XDG_RUNTIME_DIR" not in cmd_env:
                 uid = os.getuid()
                 runtime_dir = f"/run/user/{uid}"
                 if os.path.exists(runtime_dir):
