@@ -9,11 +9,13 @@ interface SparklineProps {
 
 export default function Sparkline({ data, maxPoints = 20, minVal, maxVal }: SparklineProps) {
   const gradientId = useId();
+  // If we don't have enough data points, pad with the first data point or zeros
   const points = [...data];
   while (points.length < maxPoints) {
     points.unshift(points[0] || 0);
   }
 
+  // Slice to keep only the max points
   const displayPoints = points.slice(-maxPoints);
 
   const width = 100;
@@ -27,15 +29,18 @@ export default function Sparkline({ data, maxPoints = 20, minVal, maxVal }: Spar
 
   const coordinates = displayPoints.map((val, index) => {
     const x = (index / (maxPoints - 1)) * (width - padding * 2) + padding;
+    // Map value to Y coordinate (inverted because Y=0 is the top in SVG)
     const ratio = pointsRange > 0 ? (val - resolvedMin) / pointsRange : 0.5;
     const y = height - (ratio * (height - padding * 2) + padding);
     return { x, y };
   });
 
+  // Create path description: M x0 y0 L x1 y1 ...
   const pathD = coordinates
     .map((coord, i) => `${i === 0 ? "M" : "L"} ${coord.x.toFixed(1)} ${coord.y.toFixed(1)}`)
     .join(" ");
 
+  // Create area description for gradient fill underneath
   const areaD = coordinates.length > 0
     ? `${pathD} L ${coordinates[coordinates.length - 1].x.toFixed(1)} ${height} L ${coordinates[0].x.toFixed(1)} ${height} Z`
     : "";

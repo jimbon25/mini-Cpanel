@@ -5,6 +5,27 @@
   --color-canvas-light: #fbfbfb;
   --color-canvas-dark: #09090b;
   --radius-custom: 8px;
+
+  --color-background-sem: var(--background);
+  --color-foreground-sem: var(--foreground);
+  --color-card-sem: var(--card);
+  --color-card-foreground-sem: var(--card-foreground);
+  --color-border-sem: var(--border);
+  --color-muted-sem: var(--muted);
+  --color-input-sem: var(--input);
+  --color-accent-sem: var(--accent);
+
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-slide-in: slide-in 0.2s ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-in {
+    from { transform: translateX(100%); }
+    to { transform: translateX(0); }
+  }
   
   --animate-loading-bar: loading-bar 3s infinite linear;
   @keyframes loading-bar {
@@ -27,15 +48,36 @@
   --background: #fbfbfb;
   --foreground: #09090b;
   --border-color: #e5e5e5;
+  --border: #e5e5e5;
+  --card: #ffffff;
+  --card-foreground: #09090b;
+  --muted: #737373;
+  --input: #f5f5f5;
   --accent: #2245e3;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
     --background: #09090b;
     --foreground: #fbfbfb;
     --border-color: #262626;
+    --border: #262626;
+    --card: #0c0c0e;
+    --card-foreground: #fbfbfb;
+    --muted: #a3a3a3;
+    --input: #18181b;
   }
+}
+
+:root.dark {
+  --background: #09090b;
+  --foreground: #fbfbfb;
+  --border-color: #262626;
+  --border: #262626;
+  --card: #0c0c0e;
+  --card-foreground: #fbfbfb;
+  --muted: #a3a3a3;
+  --input: #18181b;
 }
 
 body {
@@ -63,8 +105,9 @@ body {
 
 /* Custom premium monochrome classes */
 .flat-card {
-  border: 1px solid var(--border-color);
-  background-color: transparent;
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--card-foreground);
   border-radius: 8px;
   box-shadow: none;
 }
@@ -72,7 +115,7 @@ body {
 /* Premium underline input */
 .underline-input {
   border: none;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   background-color: transparent;
   border-radius: 0;
   outline: none;
@@ -82,3 +125,4 @@ body {
 .underline-input:focus {
   border-bottom-color: var(--accent);
 }
+

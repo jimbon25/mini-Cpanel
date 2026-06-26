@@ -87,7 +87,7 @@ export default function DashboardTab({
   return (
     <>
       {metrics && (
-        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 flat-card bg-neutral-50/50 dark:bg-neutral-900/10">
+        <section className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 flat-card bg-card-sem">
           <div className="flex flex-col">
             <span className="text-[10px] text-neutral-400 font-mono tracking-wider uppercase">Operating System</span>
             <span className="text-xs font-semibold font-mono tracking-tight mt-0.5">{metrics.platform.os} ({metrics.platform.architecture})</span>
@@ -118,13 +118,13 @@ export default function DashboardTab({
               </p>
             </div>
             {metrics?.cpu.temperature !== null && metrics?.cpu.temperature !== undefined && (
-              <span className="text-[10px] font-mono font-medium bg-neutral-100 dark:bg-neutral-900 px-2 py-0.5 rounded text-neutral-500">
+              <span className="text-[10px] font-mono font-medium bg-input-sem border border-border-sem px-2 py-0.5 rounded text-neutral-500">
                 {metrics.cpu.temperature.toFixed(0)}°C
               </span>
             )}
           </div>
           <Sparkline data={cpuHistory} minVal={0} maxVal={100} />
-          <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-neutral-100 dark:border-neutral-900 pt-3">
+          <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-border-sem pt-3">
             <span>CORES: {metrics?.cpu.cores_logical || "N/A"}</span>
             <span>OS PRESET: {metrics?.platform.os || "N/A"}</span>
           </footer>
@@ -141,7 +141,7 @@ export default function DashboardTab({
             </div>
           </div>
           <Sparkline data={memHistory} minVal={0} maxVal={100} />
-          <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-neutral-100 dark:border-neutral-900 pt-3">
+          <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-border-sem pt-3">
             <span>USED: {metrics ? formatBytes(metrics.memory.used) : "0 GB"}</span>
             <span>TOTAL: {metrics ? formatBytes(metrics.memory.total) : "0 GB"}</span>
           </footer>
@@ -158,7 +158,7 @@ export default function DashboardTab({
             </div>
           </div>
           <Sparkline data={diskHistory} minVal={0} maxVal={100} />
-          <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-neutral-100 dark:border-neutral-900 pt-3">
+          <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-border-sem pt-3">
             <span>USED: {metrics ? formatBytes(metrics.disk.used) : "0 GB"}</span>
             <span>TOTAL: {metrics ? formatBytes(metrics.disk.total) : "0 GB"}</span>
           </footer>
@@ -167,7 +167,7 @@ export default function DashboardTab({
 
       {traffic && traffic.rps_history && (
         <>
-          <div className="border-t border-neutral-200 dark:border-neutral-800 my-6"></div>
+          <div className="border-t border-border-sem my-6"></div>
           <div className="flex flex-col gap-1">
             <h2 className="text-xs font-bold text-foreground font-mono tracking-wider uppercase flex items-center gap-1.5">
               <svg className="w-3.5 h-3.5 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,7 +180,7 @@ export default function DashboardTab({
 
           <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
             {/* RPS card */}
-            <article className="flat-card p-4 flex flex-col gap-4 bg-neutral-50/10 dark:bg-neutral-900/5">
+            <article className="flat-card p-4 flex flex-col gap-4 bg-card-sem">
               <div className="flex justify-between items-start">
                 <div>
                   <h3 className="text-xs text-neutral-400 font-mono tracking-wider uppercase">Request Rate</h3>
@@ -190,14 +190,14 @@ export default function DashboardTab({
                 </div>
               </div>
               <Sparkline data={traffic.rps_history || []} />
-              <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-neutral-100 dark:border-neutral-900 pt-3">
+              <footer className="text-[10px] text-neutral-500 font-mono flex justify-between border-t border-border-sem pt-3">
                 <span>INBOUND PORT: DEFAULT</span>
                 <span>TYPE: {traffic.simulated ? "SIMULATED" : "LIVE CADDY"}</span>
               </footer>
             </article>
 
             {/* HTTP Responses distribution */}
-            <article className="flat-card p-4 flex flex-col justify-between gap-4 bg-neutral-50/10 dark:bg-neutral-900/5">
+            <article className="flat-card p-4 flex flex-col justify-between gap-4 bg-card-sem">
               <div className="flex flex-col gap-2">
                 <h3 className="text-xs text-neutral-400 font-mono tracking-wider uppercase">HTTP Responses</h3>
                 {(() => {
@@ -211,7 +211,7 @@ export default function DashboardTab({
                   return (
                     <>
                       {/* Segmented bar */}
-                      <div className="flex h-3 rounded-full overflow-hidden bg-neutral-200 dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-800 mt-2">
+                      <div className="flex h-3 rounded-full overflow-hidden bg-input-sem border border-border-sem mt-2">
                         {p2 > 0 && <div className="bg-green-500 h-full transition-all" style={{ width: `${p2}%` }} title={`2xx: ${p2.toFixed(1)}%`} />}
                         {p3 > 0 && <div className="bg-blue-500 h-full transition-all" style={{ width: `${p3}%` }} title={`3xx: ${p3.toFixed(1)}%`} />}
                         {p4 > 0 && <div className="bg-yellow-500 h-full transition-all" style={{ width: `${p4}%` }} title={`4xx: ${p4.toFixed(1)}%`} />}
@@ -244,7 +244,7 @@ export default function DashboardTab({
             </article>
 
             {/* Ingress Volume & Top Paths */}
-            <article className="flat-card p-4 flex flex-col justify-between gap-4 font-mono bg-neutral-50/10 dark:bg-neutral-900/5">
+            <article className="flat-card p-4 flex flex-col justify-between gap-4 font-mono bg-card-sem">
               <div className="flex flex-col gap-2">
                 <h3 className="text-xs text-neutral-400 tracking-wider uppercase">Bandwidth & Top Paths</h3>
                 <p className="text-lg font-bold tracking-tight text-foreground mt-1">
@@ -252,7 +252,7 @@ export default function DashboardTab({
                 </p>
                 
                 {/* List of top paths */}
-                <div className="flex flex-col gap-1.5 border-t border-neutral-100 dark:border-neutral-900 pt-2 mt-1">
+                <div className="flex flex-col gap-1.5 border-t border-border-sem pt-2 mt-1">
                   <span className="text-[10px] text-neutral-500 uppercase tracking-wide">Top Paths:</span>
                   {(traffic.top_paths || []).slice(0, 3).map((item, idx) => (
                     <div key={idx} className="flex justify-between items-center text-[10px] text-neutral-400">

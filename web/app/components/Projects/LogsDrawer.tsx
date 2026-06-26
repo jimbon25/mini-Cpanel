@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { websocketClient } from "@/app/utils/websocketClient";
 
 interface LogsDrawerProps {
   isOpen: boolean;
@@ -15,14 +16,16 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
   const wsRef = useRef<WebSocket | null>(null);
   const terminalEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Auto-scroll logic
   useEffect(() => {
     if (!isPaused && isOpen) {
       terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [lines, isPaused, isOpen]);
 
+  // Connect/Disconnect WebSocket
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | null = null;
 
     if (!isOpen || !token) {
       if (wsRef.current) {
@@ -33,7 +36,9 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
         setLines([]);
         setStatus("disconnected");
       }, 0);
-      return () => clearTimeout(timer);
+      return () => {
+        if (timer) clearTimeout(timer);
+      };
     }
 
     timer = setTimeout(() => {
@@ -42,7 +47,7 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
     }, 0);
     
     const wsUrl = `ws://localhost:8080/api/v1/projects/${projectId}/logs/stream?token=${encodeURIComponent(token)}`;
-    const ws = new WebSocket(wsUrl);
+    const ws = websocketClient.create(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -64,7 +69,7 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
     };
 
     return () => {
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -83,20 +88,20 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 flex justify-end z-50 bg-black/40 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 flex justify-end z-50 bg-black/40 backdrop-blur-sm select-none">
       {/* Click outside to close */}
       <div className="flex-1" onClick={onClose} />
 
       {/* Drawer Body */}
       <div 
-        className="w-full max-w-lg bg-canvas-dark h-full border-l border-neutral-800 shadow-xl flex flex-col animate-slide-in"
+        className="w-full max-w-lg bg-card-sem h-full border-l border-border-sem shadow-xl flex flex-col animate-slide-in text-foreground-sem"
         data-testid="logs-drawer"
       >
         {/* Header */}
-        <header className="flex justify-between items-center p-4 border-b border-neutral-800">
+        <header className="flex justify-between items-center p-4 border-b border-border-sem">
           <div>
-            <h2 className="text-xs font-mono font-bold text-neutral-400">STREAMING SERVICE LOGS</h2>
-            <p className="text-xs font-mono text-white mt-0.5">/{projectId}</p>
+            <h2 className="text-xs font-mono font-bold text-muted-sem">STREAMING SERVICE LOGS</h2>
+            <p className="text-xs font-mono text-foreground-sem mt-0.5">/{projectId}</p>
           </div>
           
           <div className="flex items-center gap-3">
@@ -109,12 +114,12 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
                   : "bg-red-500"
               }`}
             />
-            <span className="text-[10px] font-mono text-neutral-500 uppercase">
+            <span className="text-[10px] font-mono text-muted-sem uppercase">
               {status}
             </span>
             <button
               onClick={onClose}
-              className="text-xs text-neutral-400 hover:text-white font-mono ml-2 border border-neutral-800 hover:border-neutral-700 px-2 py-1 rounded"
+              className="text-xs text-muted-sem hover:text-foreground-sem font-mono ml-2 border border-border-sem hover:border-border-sem px-2 py-1 rounded"
             >
               CLOSE
             </button>
@@ -122,15 +127,15 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
         </header>
 
         {/* Toolbar */}
-        <div className="flex justify-between items-center px-4 py-2 border-b border-neutral-900 bg-neutral-950/20 text-neutral-400 font-mono text-[10px]">
+        <div className="flex justify-between items-center px-4 py-2 border-b border-border-sem bg-input-sem text-muted-sem font-mono text-[10px]">
           <div className="flex gap-4">
             <button 
               onClick={handleTogglePause} 
-              className={`hover:text-white transition-all uppercase ${isPaused ? "text-amber-500 font-bold" : ""}`}
+              className={`hover:text-foreground-sem transition-all uppercase ${isPaused ? "text-amber-500 font-bold" : ""}`}
             >
               {isPaused ? "▶ RESUME" : "⏸ PAUSE"}
             </button>
-            <button onClick={handleClear} className="hover:text-white transition-all uppercase">
+            <button onClick={handleClear} className="hover:text-foreground-sem transition-all uppercase">
               ❌ CLEAR
             </button>
           </div>
@@ -140,9 +145,9 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
         </div>
 
         {/* Monospace Code Log Screen */}
-        <div className="flex-1 p-4 overflow-y-auto font-mono text-xs text-neutral-300 flex flex-col gap-1.5 select-text">
+        <div className="flex-1 p-4 overflow-y-auto font-mono text-xs text-foreground-sem flex flex-col gap-1.5 select-text bg-input-sem/20">
           {lines.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-neutral-500 text-xs">
+            <div className="h-full flex items-center justify-center text-muted-sem text-xs">
               {status === "connecting" ? "Establishing socket pipeline..." : "No logs received yet."}
             </div>
           ) : (
@@ -150,7 +155,7 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
               const isSystem = line.startsWith("[System") || line.startsWith("[Docker");
               return (
                 <div key={index} className="flex gap-4 items-start leading-relaxed">
-                  <span className="text-[10px] text-neutral-700 w-8 select-none text-right">
+                  <span className="text-[10px] text-muted-sem w-8 select-none text-right">
                     {(index + 1).toString().padStart(3, "0")}
                   </span>
                   <span 
@@ -159,7 +164,7 @@ export default function LogsDrawer({ isOpen, onClose, projectId, token }: LogsDr
                         ? "text-cobalt font-bold" 
                         : line.startsWith("[Error") 
                         ? "text-red-400" 
-                        : "text-neutral-300"
+                        : "text-foreground-sem"
                     }
                   >
                     {line}

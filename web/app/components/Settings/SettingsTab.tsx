@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { apiClient } from "@/app/utils/apiClient";
+import { useNotification } from "@/app/context/NotificationContext";
 
 interface NotificationChannel {
   channel_type: string;
@@ -15,6 +17,7 @@ interface SettingsTabProps {
 }
 
 export default function SettingsTab({ token, addLog }: SettingsTabProps) {
+  const { showToast } = useNotification();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -38,7 +41,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
     setError("");
     try {
       // 1. Fetch notifications configurations
-      const response = await fetch("http://localhost:8080/api/v1/notifications", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/notifications", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Failed to load settings");
@@ -57,7 +60,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
       });
 
       // 2. Fetch system/proxy settings
-      const proxyResponse = await fetch("http://localhost:8080/api/v1/system/settings", {
+      const proxyResponse = await apiClient.fetch("http://localhost:8080/api/v1/system/settings", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (proxyResponse.ok) {
@@ -83,7 +86,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
   ) => {
     setLoading(true);
     try {
-      const response = await fetch("http://localhost:8080/api/v1/notifications", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -97,11 +100,11 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
 
       if (!response.ok) throw new Error(`Failed to save ${type} configuration`);
       addLog(`Successfully saved ${type} alert rules.`);
-      alert(`${type.toUpperCase()} settings saved successfully.`);
+      showToast(`${type.toUpperCase()} settings saved successfully.`, "success");
       fetchSettings();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
-      alert(msg);
+      showToast(msg, "error");
       addLog(`Settings Error: ${msg}`);
     } finally {
       setLoading(false);
@@ -114,7 +117,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
 
     addLog(`Sending verification alert testing message to ${type}...`);
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/notifications/test/${type}`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/notifications/test/${type}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -124,11 +127,11 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
         throw new Error(errData.detail || "Verification alert trigger failed");
       }
 
-      alert(`Test message successfully sent to ${type}!`);
+      showToast(`Test message successfully sent to ${type}!`, "success");
       addLog(`Verified ${type} alert channel configuration.`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Test failed";
-      alert(msg);
+      showToast(msg, "error");
       addLog(`Settings Error: ${msg}`);
     } finally {
       if (type === "telegram") setTestingTg(false);
@@ -141,7 +144,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
     setSavingProxy(true);
     addLog("Saving proxy log settings...");
     try {
-      const response = await fetch("http://localhost:8080/api/v1/system/settings", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/system/settings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -155,11 +158,11 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
 
       if (!response.ok) throw new Error("Failed to save proxy log settings");
       addLog("Successfully saved proxy log analyzer settings.");
-      alert("Proxy settings saved successfully.");
+      showToast("Proxy settings saved successfully.", "success");
       fetchSettings();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Save failed";
-      alert(msg);
+      showToast(msg, "error");
       addLog(`Settings Error: ${msg}`);
     } finally {
       setSavingProxy(false);
@@ -193,9 +196,9 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Telegram Form */}
-        <article className="flat-card p-6 flex flex-col justify-between gap-4 bg-neutral-50/50 dark:bg-neutral-900/10 rounded-lg">
+        <article className="flat-card p-6 flex flex-col justify-between gap-4 border border-border-sem rounded-lg bg-card-sem text-xs">
           <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center border-b border-neutral-200 dark:border-neutral-800 pb-2">
+            <div className="flex justify-between items-center border-b border-border-sem pb-2">
               <h3 className="text-xs text-neutral-400 font-mono tracking-wider uppercase">Telegram Alert Channel</h3>
               <div className="flex items-center gap-2 font-mono text-[10px]">
                 <label className="text-neutral-500">IS ACTIVE</label>
@@ -203,7 +206,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
                   type="checkbox"
                   checked={tgActive}
                   onChange={(e) => setTgActive(e.target.checked)}
-                  className="accent-cobalt rounded"
+                  className="accent-accent-sem rounded cursor-pointer"
                 />
               </div>
             </div>
@@ -215,7 +218,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
                   type="password"
                   value={tgToken}
                   onChange={(e) => setTgToken(e.target.value)}
-                  className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-cobalt"
+                  className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem"
                   placeholder="123456789:ABCDefghIJKlmNoPQRsT..."
                 />
               </div>
@@ -226,7 +229,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
                   type="text"
                   value={tgChatId}
                   onChange={(e) => setTgChatId(e.target.value)}
-                  className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-cobalt"
+                  className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem"
                   placeholder="987654321"
                 />
               </div>
@@ -238,7 +241,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
               type="button"
               disabled={loading || !tgToken || !tgChatId}
               onClick={() => handleSaveChannel("telegram", { bot_token: tgToken, chat_id: tgChatId, is_active: tgActive })}
-              className="border border-neutral-200 dark:border-neutral-800 rounded px-4 py-2 text-xs font-mono bg-transparent hover:bg-cobalt hover:text-white hover:border-cobalt disabled:opacity-50 transition-all font-bold"
+              className="border border-border-sem rounded px-4 py-2 text-xs font-mono bg-transparent hover:bg-accent-sem hover:text-white hover:border-accent-sem disabled:opacity-50 transition-all font-bold cursor-pointer"
             >
               SAVE SETTINGS
             </button>
@@ -246,7 +249,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
               type="button"
               disabled={testingTg || !tgToken || !tgChatId}
               onClick={() => handleTestChannel("telegram")}
-              className="border border-neutral-200 dark:border-neutral-800 rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-white hover:border-neutral-700 disabled:opacity-50 transition-all ml-auto"
+              className="border border-border-sem rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-foreground-sem hover:border-border-sem disabled:opacity-50 transition-all ml-auto cursor-pointer"
             >
               {testingTg ? "TESTING..." : "TEST"}
             </button>
@@ -254,9 +257,9 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
         </article>
 
         {/* Discord Form */}
-        <article className="flat-card p-6 flex flex-col justify-between gap-4 bg-neutral-50/50 dark:bg-neutral-900/10 rounded-lg">
+        <article className="flat-card p-6 flex flex-col justify-between gap-4 border border-border-sem rounded-lg bg-card-sem text-xs">
           <div className="flex flex-col gap-4">
-            <div className="flex justify-between items-center border-b border-neutral-200 dark:border-neutral-800 pb-2">
+            <div className="flex justify-between items-center border-b border-border-sem pb-2">
               <h3 className="text-xs text-neutral-400 font-mono tracking-wider uppercase">Discord Webhook Channel</h3>
               <div className="flex items-center gap-2 font-mono text-[10px]">
                 <label className="text-neutral-500">IS ACTIVE</label>
@@ -264,7 +267,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
                   type="checkbox"
                   checked={dcActive}
                   onChange={(e) => setDcActive(e.target.checked)}
-                  className="accent-cobalt rounded"
+                  className="accent-accent-sem rounded cursor-pointer"
                 />
               </div>
             </div>
@@ -276,7 +279,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
                   type="url"
                   value={dcWebhook}
                   onChange={(e) => setDcWebhook(e.target.value)}
-                  className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-cobalt"
+                  className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem"
                   placeholder="https://discord.com/api/webhooks/..."
                 />
               </div>
@@ -288,7 +291,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
               type="button"
               disabled={loading || !dcWebhook}
               onClick={() => handleSaveChannel("discord", { webhook_url: dcWebhook, is_active: dcActive })}
-              className="border border-neutral-200 dark:border-neutral-800 rounded px-4 py-2 text-xs font-mono bg-transparent hover:bg-cobalt hover:text-white hover:border-cobalt disabled:opacity-50 transition-all font-bold"
+              className="border border-border-sem rounded px-4 py-2 text-xs font-mono bg-transparent hover:bg-accent-sem hover:text-white hover:border-accent-sem disabled:opacity-50 transition-all font-bold cursor-pointer"
             >
               SAVE SETTINGS
             </button>
@@ -296,7 +299,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
               type="button"
               disabled={testingDc || !dcWebhook}
               onClick={() => handleTestChannel("discord")}
-              className="border border-neutral-200 dark:border-neutral-800 rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-white hover:border-neutral-700 disabled:opacity-50 transition-all ml-auto"
+              className="border border-border-sem rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-foreground-sem hover:border-border-sem disabled:opacity-50 transition-all ml-auto cursor-pointer"
             >
               {testingDc ? "TESTING..." : "TEST"}
             </button>
@@ -304,9 +307,9 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
         </article>
 
         {/* Ingress Proxy Log Settings Card */}
-        <article className="flat-card p-6 flex flex-col justify-between gap-4 bg-neutral-50/50 dark:bg-neutral-900/10 rounded-lg md:col-span-2">
+        <article className="flat-card p-6 flex flex-col justify-between gap-4 border border-border-sem rounded-lg bg-card-sem text-xs md:col-span-2">
           <div className="flex flex-col gap-4">
-            <div className="border-b border-neutral-200 dark:border-neutral-800 pb-2">
+            <div className="border-b border-border-sem pb-2">
               <h3 className="text-xs text-neutral-400 font-mono tracking-wider uppercase">Ingress Proxy Log Analyzer</h3>
             </div>
 
@@ -317,7 +320,7 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
                   <select
                     value={proxyType}
                     onChange={(e) => setProxyType(e.target.value)}
-                    className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-cobalt font-mono"
+                    className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem font-mono cursor-pointer"
                   >
                     <option value="disabled">Disabled (Simulated Mock Traffic)</option>
                     <option value="caddy">Caddy Reverse Proxy (Structured JSON Log)</option>
@@ -332,20 +335,20 @@ export default function SettingsTab({ token, addLog }: SettingsTabProps) {
                     value={proxyLogPath}
                     disabled={proxyType === "disabled"}
                     onChange={(e) => setProxyLogPath(e.target.value)}
-                    className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-cobalt disabled:opacity-50"
+                    className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem disabled:opacity-50"
                     placeholder={proxyType === "nginx" ? "/var/log/nginx/access.log" : proxyType === "caddy" ? "/var/log/caddy/access.log" : "Log analysis disabled"}
                   />
                 </div>
               </div>
 
-              <div className="flex flex-col md:flex-row justify-between items-start md:items-center text-[10px] text-neutral-500 mt-2 border-t border-neutral-100 dark:border-neutral-900 pt-3 gap-2">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center text-[10px] text-neutral-500 mt-2 border-t border-border-sem pt-3 gap-2">
                 <span>
                   Tip: Make sure the backend user has read access (e.g. <code>sudo usermod -aG adm user</code>).
                 </span>
                 <button
                   type="submit"
                   disabled={savingProxy}
-                  className="border border-neutral-200 dark:border-neutral-800 rounded px-4 py-2 text-xs font-mono bg-transparent hover:bg-cobalt hover:text-white hover:border-cobalt disabled:opacity-50 transition-all font-bold md:ml-auto"
+                  className="border border-border-sem rounded px-4 py-2 text-xs font-mono bg-transparent hover:bg-accent-sem hover:text-white hover:border-accent-sem disabled:opacity-50 transition-all font-bold md:ml-auto cursor-pointer"
                 >
                   {savingProxy ? "SAVING..." : "SAVE PROXY SETTINGS"}
                 </button>

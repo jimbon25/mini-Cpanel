@@ -15,85 +15,28 @@ import Sidebar, { TabType } from "./components/Sidebar";
 import MarketplaceTab from "./components/Marketplace/MarketplaceTab";
 import TerminalTab from "./components/Terminal/TerminalTab";
 import UsersTab from "./components/Users/UsersTab";
+import CommandPalette from "./components/CommandPalette";
 
-if (typeof window !== "undefined") {
-  const getBaseUrl = (): string => {
-    if (process.env.NEXT_PUBLIC_API_URL) {
-      return process.env.NEXT_PUBLIC_API_URL;
-    }
-    
-    const { hostname, protocol } = window.location;
-    
-    if (hostname !== "localhost" && hostname !== "127.0.0.1") {
-      const httpProto = protocol === "https:" ? "https:" : "http:";
-      return `${httpProto}//${hostname}:8080`;
-    }
-    
-    return "http://localhost:8080";
-  };
-
-  const getBaseWsUrl = (): string => {
-    const baseUrl = getBaseUrl();
-    return baseUrl.replace(/^http/, "ws");
-  };
-
-  // Override window.fetch
-  const originalFetch = window.fetch;
-  window.fetch = function (input, init) {
-    if (typeof input === "string" && input.startsWith("http://localhost:8080")) {
-      const baseUrl = getBaseUrl();
-      const targetUrl = input.replace("http://localhost:8080", baseUrl);
-      return originalFetch(targetUrl, init);
-    }
-    return originalFetch(input, init);
-  };
-
-  // Override window.WebSocket to handle WebSocket streaming dynamically
-  const OriginalWebSocket = window.WebSocket;
-  // @ts-expect-error - WebSocket override is not natively typed on window
-  window.WebSocket = function (url, protocols) {
-    if (typeof url === "string" && url.startsWith("ws://localhost:8080")) {
-      const baseWsUrl = getBaseWsUrl();
-      const targetUrl = url.replace("ws://localhost:8080", baseWsUrl);
-      return new OriginalWebSocket(targetUrl, protocols);
-    }
-    return new OriginalWebSocket(url, protocols);
-  };
-  window.WebSocket.prototype = OriginalWebSocket.prototype;
-  // @ts-expect-error - overriding read-only/static WebSocket constants
-  window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
-  // @ts-expect-error - overriding read-only/static WebSocket constants
-  window.WebSocket.OPEN = OriginalWebSocket.OPEN;
-  // @ts-expect-error - overriding read-only/static WebSocket constants
-  window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
-  // @ts-expect-error - overriding read-only/static WebSocket constants
-  window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
-}
-
-// Helper to decode JWT payload client-side without external dependencies
-function decodeJwt(token: string): { sub?: string; role?: string } | null {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      window.atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-}
+import { apiClient } from "@/app/utils/apiClient";
+import { websocketClient } from "@/app/utils/websocketClient";
+import { useAuth } from "@/app/context/AuthContext";
+import { useNotification } from "@/app/context/NotificationContext";
 
 export default function App() {
+  const {
+    token,
+    userRole,
+    agentStatus,
+    setAgentStatus,
+    login: setAuthToken,
+    logout: clearAuthToken,
+  } = useAuth();
+  const { showToast } = useNotification();
+
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [token, setToken] = useState<string | null>(null);
-  const userRole = token ? (decodeJwt(token)?.role || "super_admin") : "viewer";
 
   // Tabs: "dashboard" | "files" | "projects" | "apps" | "cron" | "backup" | "settings" | "databases" | "terminal"
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
@@ -104,7 +47,6 @@ export default function App() {
   const [memHistory, setMemHistory] = useState<number[]>([]);
   const [diskHistory, setDiskHistory] = useState<number[]>([]);
   const [uptimeSeconds, setUptimeSeconds] = useState<number>(0);
-  const [agentStatus, setAgentStatus] = useState<"connecting" | "online" | "offline">("connecting");
 
   // Ingress Traffic States
   const [traffic, setTraffic] = useState<TrafficMetrics | null>(null);
@@ -125,14 +67,13 @@ export default function App() {
   }, []);
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem("minicpanel_token");
-    setToken(null);
+    clearAuthToken();
     setUsername("");
     setPassword("");
     setActiveTab("dashboard");
     setConsoleLogs([]);
     addLog("Session logged out.");
-  }, [addLog]);
+  }, [clearAuthToken, addLog]);
 
   const handleLogin = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,7 +82,7 @@ export default function App() {
     addLog(`Attempting login for user: ${username}...`);
 
     try {
-      const response = await fetch("http://localhost:8080/api/v1/auth/login", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -155,8 +96,8 @@ export default function App() {
       }
 
       const data = await response.json();
-      localStorage.setItem("minicpanel_token", data.access_token);
-      setToken(data.access_token);
+      setAuthToken(data.access_token);
+      showToast("Logged in successfully", "success");
       addLog("Login successful. Access token generated.");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Cannot connect to backend agent";
@@ -165,24 +106,7 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }, [username, password, addLog]);
-
-  // Check for existing token on mount
-  useEffect(() => {
-    const savedToken = localStorage.getItem("minicpanel_token");
-    let timer: ReturnType<typeof setTimeout>;
-    if (savedToken) {
-      timer = setTimeout(() => {
-        setToken(savedToken);
-        addLog("Existing token found. Session loaded.");
-      }, 0);
-    } else {
-      timer = setTimeout(() => {
-        setAgentStatus("offline");
-      }, 0);
-    }
-    return () => clearTimeout(timer);
-  }, [addLog]);
+  }, [username, password, setAuthToken, showToast, addLog]);
 
   // Client-Side Tab Route Guard
   useEffect(() => {
@@ -201,9 +125,9 @@ export default function App() {
     }
   }, [activeTab, userRole, token, addLog]);
 
-  // Poll metrics when token changes
+  // Poll metrics when token or activeTab changes
   useEffect(() => {
-    if (!token) {
+    if (!token || activeTab !== "dashboard") {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (uptimeRef.current) clearInterval(uptimeRef.current);
       const timer = setTimeout(() => {
@@ -218,7 +142,7 @@ export default function App() {
 
     const fetchMetrics = async () => {
       try {
-        const response = await fetch("http://localhost:8080/api/v1/system/metrics", {
+        const response = await apiClient.fetch("http://localhost:8080/api/v1/system/metrics", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -259,10 +183,11 @@ export default function App() {
       if (pollingRef.current) clearInterval(pollingRef.current);
       if (uptimeRef.current) clearInterval(uptimeRef.current);
     };
-  }, [token, handleLogout, addLog]);
+  }, [token, activeTab, handleLogout, setAgentStatus, addLog]);
 
+  // Traffic WebSocket Connection for real-time 1s updates
   useEffect(() => {
-    if (!token) {
+    if (!token || activeTab !== "dashboard") {
       const timer = setTimeout(() => {
         setTraffic(null);
       }, 0);
@@ -277,7 +202,7 @@ export default function App() {
       if (!isComponentMounted) return;
 
       const wsUrl = `ws://localhost:8080/api/v1/system/traffic/ws?token=${encodeURIComponent(token)}`;
-      ws = new WebSocket(wsUrl);
+      ws = websocketClient.create(wsUrl);
 
       ws.onmessage = (event) => {
         try {
@@ -296,6 +221,7 @@ export default function App() {
 
       ws.onclose = () => {
         if (isComponentMounted) {
+          console.log("Traffic WebSocket connection closed. Retrying in 5 seconds...");
           reconnectTimeout = setTimeout(connect, 5000);
         }
       };
@@ -312,7 +238,7 @@ export default function App() {
         clearTimeout(reconnectTimeout);
       }
     };
-  }, [token]);
+  }, [token, activeTab]);
 
   interface ActivityLogItem {
     id: string;
@@ -324,11 +250,11 @@ export default function App() {
 
   // Poll activity logs from database dynamically
   useEffect(() => {
-    if (!token) return;
+    if (!token || (activeTab !== "dashboard" && activeTab !== "projects")) return;
 
     const fetchActivityLogs = async () => {
       try {
-        const response = await fetch("http://localhost:8080/api/v1/system/activity-logs", {
+        const response = await apiClient.fetch("http://localhost:8080/api/v1/system/activity-logs", {
           headers: {
             Authorization: `Bearer ${token}`,
           },
@@ -363,7 +289,7 @@ export default function App() {
     fetchActivityLogs();
     const interval = setInterval(fetchActivityLogs, 3000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, activeTab]);
 
   if (!token) {
     return (
@@ -381,6 +307,18 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-canvas-light dark:bg-canvas-dark text-foreground w-full">
+      {/* Command Palette */}
+      <CommandPalette
+        setActiveTab={setActiveTab}
+        userRole={userRole}
+        onLogout={handleLogout}
+        onViewLogs={() => {
+          setLogsProjectId("local-agent");
+          setLogsDrawerOpen(true);
+          addLog("Opened live log stream console.");
+        }}
+      />
+
       {/* Sidebar Component */}
       <Sidebar
         activeTab={activeTab}
@@ -400,7 +338,7 @@ export default function App() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col p-4 md:p-8 gap-6 overflow-y-auto w-full">
         {/* Mobile Header (Only visible on mobile) */}
-        <header className="md:hidden flex justify-between items-center pb-4 border-b border-neutral-200 dark:border-neutral-800">
+        <header className="md:hidden sticky top-0 bg-canvas-light/95 dark:bg-canvas-dark/95 backdrop-blur-md z-40 flex justify-between items-center py-2 pb-4 border-b border-border-sem">
           <div>
             <h1 className="text-lg font-black tracking-tighter text-foreground">
               mini<span className="text-cobalt font-light font-mono">.cpanel</span>
@@ -408,7 +346,7 @@ export default function App() {
           </div>
           <button
             onClick={() => setMobileMenuOpen(true)}
-            className="border border-neutral-200 dark:border-neutral-800 px-3 py-1.5 rounded-lg text-xs font-mono text-neutral-400 hover:text-foreground"
+            className="border border-border-sem px-3 py-1.5 rounded-lg text-xs font-mono text-muted-sem hover:text-foreground-sem cursor-pointer"
           >
             MENU
           </button>
@@ -498,7 +436,7 @@ export default function App() {
         {/* Terminal Activity Logs Box */}
         <section className="flex flex-col gap-2 mt-auto">
           <h3 className="text-xs text-neutral-400 font-mono tracking-wider uppercase">Activity Console</h3>
-          <div className="flat-card bg-canvas-dark text-neutral-300 p-4 rounded-lg font-mono text-xs h-40 overflow-y-auto flex flex-col-reverse gap-1 border-neutral-800">
+          <div className="bg-[#0c0c0e] text-neutral-300 p-4 rounded-lg font-mono text-xs h-40 overflow-y-auto flex flex-col-reverse gap-1 border border-neutral-800/80 dark:border-border-sem/40 shadow-inner">
             {consoleLogs.map((log, index) => {
               const isError = log.includes("Error") || log.includes("failed") || log.includes("expired");
               return (
@@ -510,7 +448,7 @@ export default function App() {
                 </div>
               );
             })}
-            <div className="text-cobalt border-b border-neutral-900 pb-1 mb-1 font-bold">
+            <div className="text-cobalt border-b border-border-sem/20 pb-1 mb-1 font-bold">
               *** MINI CPANEL RECEPTION CONSOLE INITIALIZED ***
             </div>
           </div>

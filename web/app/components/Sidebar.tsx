@@ -143,16 +143,16 @@ export default function Sidebar({
         {/* Mobile close toggle */}
         <div className="flex justify-between items-center md:block">
           <div>
-            <h1 className="text-lg font-black tracking-tighter text-foreground">
+            <h1 className="text-lg font-black tracking-tighter text-foreground-sem">
               mini<span className="text-cobalt font-light font-mono">.cpanel</span>
             </h1>
-            <p className="text-[10px] text-neutral-400 tracking-widest uppercase font-mono mt-0.5">
+            <p className="text-[10px] text-muted-sem tracking-widest uppercase font-mono mt-0.5">
               SERVER ORCHESTRATOR
             </p>
           </div>
           <button
             onClick={onClose}
-            className="md:hidden border border-neutral-200 dark:border-neutral-800 p-1.5 rounded-lg text-neutral-400 hover:text-foreground"
+            className="md:hidden border border-border-sem p-1.5 rounded-lg text-muted-sem hover:text-foreground-sem"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -161,13 +161,13 @@ export default function Sidebar({
         </div>
 
         {/* Connectivity Status */}
-        <div className="flex items-center gap-2 border border-neutral-200 dark:border-neutral-800/60 p-2 rounded-lg bg-neutral-50/50 dark:bg-neutral-900/10">
+        <div className="flex items-center gap-2 border border-border-sem p-2 rounded-lg bg-card-sem">
           <span
             className={`w-1.5 h-1.5 rounded-full ${
               agentStatus === "online" ? "bg-cobalt animate-pulse" : "bg-red-500"
             }`}
           ></span>
-          <span className="text-[10px] font-mono font-medium tracking-wider uppercase text-neutral-500">
+          <span className="text-[10px] font-mono font-medium tracking-wider uppercase text-muted-sem">
             AGENT: {agentStatus}
           </span>
         </div>
@@ -185,12 +185,12 @@ export default function Sidebar({
                 }}
                 className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-xs font-mono text-left transition-all ${
                   isActive
-                    ? "bg-neutral-950 border-cobalt text-white font-bold"
-                    : "bg-transparent border-transparent text-neutral-400 hover:text-foreground hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10"
+                    ? "bg-foreground-sem border-cobalt text-background-sem font-bold"
+                    : "bg-transparent border-transparent text-muted-sem hover:text-foreground-sem hover:bg-input-sem"
                 }`}
                 data-testid={`tab-${item.id}`}
               >
-                <span className={isActive ? "text-cobalt" : "text-neutral-500"}>{item.icon}</span>
+                <span className={isActive ? "text-cobalt" : "text-muted-sem"}>{item.icon}</span>
                 <span className="flex-1 truncate">{item.label}</span>
               </button>
             );
@@ -199,11 +199,11 @@ export default function Sidebar({
       </div>
 
       {/* Footer Controls */}
-      <div className="flex flex-col gap-2 pt-4 border-t border-neutral-200 dark:border-neutral-800/80">
+      <div className="flex flex-col gap-2 pt-4 border-t border-border-sem">
         {userRole !== "viewer" && (
           <button
             onClick={onViewLogs}
-            className="w-full flex justify-between items-center text-xs border border-neutral-200 dark:border-neutral-800 p-2 rounded hover:bg-cobalt hover:text-white hover:border-cobalt transition-all font-mono"
+            className="w-full flex justify-between items-center text-xs border border-border-sem p-2 rounded hover:bg-cobalt hover:text-white hover:border-cobalt transition-all font-mono"
             data-testid="btn-view-logs"
           >
             <span>LIVE LOGS</span>
@@ -213,7 +213,7 @@ export default function Sidebar({
 
         <button
           onClick={onLogout}
-          className="w-full flex items-center gap-2.5 p-2.5 rounded-lg text-xs font-mono text-left transition-all border border-transparent text-neutral-400 hover:text-red-500 hover:bg-red-500/10"
+          className="w-full flex items-center gap-2.5 p-2.5 rounded-lg text-xs font-mono text-left transition-all border border-transparent text-muted-sem hover:text-red-500 hover:bg-red-500/10"
         >
           <svg className="w-4 h-4 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -227,7 +227,7 @@ export default function Sidebar({
   return (
     <>
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/20 dark:bg-neutral-900/5 h-screen sticky top-0 p-6 shrink-0 overflow-y-auto">
+      <aside className="hidden md:flex flex-col w-64 border-r border-border-sem bg-card-sem h-screen sticky top-0 p-6 shrink-0 overflow-y-auto">
         {sidebarContent}
       </aside>
 
@@ -238,7 +238,7 @@ export default function Sidebar({
             onClick={onClose}
             className="fixed inset-0 bg-black/60 z-40 md:hidden animate-fade-in"
           ></div>
-          <aside className="fixed inset-y-0 left-0 w-64 bg-canvas-light dark:bg-canvas-dark border-r border-neutral-200 dark:border-neutral-800 z-50 p-6 md:hidden overflow-y-auto">
+          <aside className="fixed inset-y-0 left-0 w-64 bg-background-sem border-r border-border-sem z-50 p-6 md:hidden overflow-y-auto animate-slide-in">
             {sidebarContent}
           </aside>
         </>

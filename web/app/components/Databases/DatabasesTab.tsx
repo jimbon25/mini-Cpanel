@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { apiClient } from "@/app/utils/apiClient";
+import { useNotification } from "@/app/context/NotificationContext";
 
 interface DatabaseConnection {
   id: string;
@@ -25,13 +27,17 @@ interface DatabasesTabProps {
 }
 
 export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
+  const { showToast, confirm } = useNotification();
+  // Database list states
   const [databases, setDatabases] = useState<DatabaseConnection[]>([]);
   const [selectedDbId, setSelectedDbId] = useState<string>("primary-sqlite");
   
+  // Table inspection states
   const [tables, setTables] = useState<string[]>([]);
   const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [tableTab, setTableTab] = useState<"browse" | "structure">("browse");
   
+  // Table schema & data states
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<unknown[][]>([]);
   const [schema, setSchema] = useState<TableColumn[]>([]);
@@ -39,6 +45,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
   const [page, setPage] = useState(1);
   const constLimit = 20;
 
+  // Raw Query states
   const [isQueryView, setIsQueryView] = useState(false);
   const [rawQuery, setRawQuery] = useState("");
   const [queryResult, setQueryResult] = useState<{
@@ -49,6 +56,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
     error?: string;
   } | null>(null);
 
+  // New Connection Form States
   const [showAddForm, setShowAddForm] = useState(false);
   const [formName, setFormName] = useState("");
   const [formDbType, setFormDbType] = useState("sqlite");
@@ -65,7 +73,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
   const fetchDatabases = useCallback(async () => {
     setError("");
     try {
-      const response = await fetch("http://localhost:8080/api/v1/databases", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/databases", {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Failed to load databases list");
@@ -82,7 +90,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
   const fetchTables = useCallback(async (dbId: string) => {
     setError("");
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/databases/${dbId}/tables`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/databases/${dbId}/tables`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Failed to fetch database tables");
@@ -97,7 +105,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
 
   const fetchTableSchema = useCallback(async (dbId: string, tbl: string) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/databases/${dbId}/tables/${tbl}/schema`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/databases/${dbId}/tables/${tbl}/schema`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) throw new Error("Failed to fetch table schema");
@@ -111,7 +119,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
 
   const fetchTableData = useCallback(async (dbId: string, tbl: string, currentPage: number) => {
     try {
-      const response = await fetch(
+      const response = await apiClient.fetch(
         `http://localhost:8080/api/v1/databases/${dbId}/tables/${tbl}/data?page=${currentPage}&limit=${constLimit}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -126,6 +134,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
     }
   }, [token, addLog]);
 
+  // Handle db change
   useEffect(() => {
     if (token) {
       const timer = setTimeout(() => {
@@ -175,7 +184,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
     };
 
     try {
-      const response = await fetch("http://localhost:8080/api/v1/databases", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/databases", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -186,6 +195,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
 
       if (!response.ok) throw new Error("Failed to register database connection");
       
+      showToast(`Database connection '${formName}' registered successfully`, "success");
       addLog(`Registered database connection '${formName}'.`);
       setFormName("");
       setFormFilePath("");
@@ -205,32 +215,36 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
     }
   };
 
-  const handleDeleteDb = async (id: string, name: string) => {
+  const handleDeleteDb = (id: string, name: string) => {
     if (id === "primary-sqlite") return;
-    if (!confirm(`Are you sure you want to remove database connection '${name}'?`)) return;
-    
-    try {
-      const response = await fetch(`http://localhost:8080/api/v1/databases/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    confirm({
+      message: `Are you sure you want to remove database connection '${name}'?`,
+      onConfirm: async () => {
+        try {
+          const response = await apiClient.fetch(`http://localhost:8080/api/v1/databases/${id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${token}` },
+          });
 
-      if (!response.ok) throw new Error("Failed to unregister database connection");
-      
-      addLog(`Removed database connection '${name}'.`);
-      if (selectedDbId === id) {
-        setSelectedDbId("primary-sqlite");
-        setSelectedTable(null);
-        setColumns([]);
-        setRows([]);
-        setQueryResult(null);
+          if (!response.ok) throw new Error("Failed to unregister database connection");
+          
+          showToast(`Database connection '${name}' removed successfully`, "success");
+          addLog(`Removed database connection '${name}'.`);
+          if (selectedDbId === id) {
+            setSelectedDbId("primary-sqlite");
+            setSelectedTable(null);
+            setColumns([]);
+            setRows([]);
+            setQueryResult(null);
+          }
+          fetchDatabases();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Deletion failed";
+          showToast(msg, "error");
+          addLog(`Database Admin Error: ${msg}`);
+        }
       }
-      fetchDatabases();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Deletion failed";
-      alert(msg);
-      addLog(`Database Admin Error: ${msg}`);
-    }
+    });
   };
 
   const handleExecuteQuery = async () => {
@@ -240,7 +254,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
     addLog(`Executing custom SQL query on selected database...`);
 
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/databases/${selectedDbId}/query`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/databases/${selectedDbId}/query`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -274,11 +288,11 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
   return (
     <section className="grid grid-cols-1 lg:grid-cols-4 gap-6">
       {/* Sidebar - Connection List & Tables list */}
-      <aside className="lg:col-span-1 flex flex-col gap-4 border-r border-neutral-200 dark:border-neutral-800 pr-0 lg:pr-6">
+      <aside className="lg:col-span-1 flex flex-col gap-4 border-r border-border-sem pr-0 lg:pr-6">
         {/* Database selector */}
         <div className="flex flex-col gap-2">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm text-neutral-400 font-mono tracking-wider uppercase">Active Databases</h3>
+            <h3 className="text-sm text-muted-sem font-mono tracking-wider uppercase">Active Databases</h3>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
               className="text-xs text-cobalt font-mono border border-cobalt/20 hover:border-cobalt/60 px-2 py-0.5 rounded transition-all"
@@ -293,8 +307,8 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
                 key={db.id}
                 className={`flex justify-between items-center p-2 rounded-lg border text-xs font-mono transition-all ${
                   selectedDbId === db.id
-                    ? "bg-neutral-900 border-cobalt text-white font-bold"
-                    : "bg-neutral-50/50 dark:bg-neutral-900/10 border-neutral-200 dark:border-neutral-800 text-neutral-400 hover:text-foreground hover:border-neutral-400"
+                    ? "bg-foreground-sem border-cobalt text-background-sem font-bold"
+                    : "bg-card-sem border-border-sem text-muted-sem hover:text-foreground-sem hover:border-neutral-400"
                 }`}
               >
                 <button
@@ -327,30 +341,30 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
         {showAddForm && (
           <form
             onSubmit={handleRegisterDb}
-            className="flex flex-col gap-3 p-4 border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/10 rounded-lg text-sm font-mono"
+            className="flex flex-col gap-3 p-4 border border-border-sem bg-card-sem rounded-lg text-sm font-mono"
           >
-            <h4 className="text-xs text-neutral-400 uppercase tracking-widest font-bold border-b border-neutral-200 dark:border-neutral-800 pb-1.5">
+            <h4 className="text-xs text-muted-sem uppercase tracking-widest font-bold border-b border-border-sem pb-1.5">
               New DB Connection
             </h4>
 
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-neutral-400">CONN NAME *</label>
+              <label className="text-[10px] text-muted-sem">CONN NAME *</label>
               <input
                 type="text"
                 required
                 value={formName}
                 onChange={(e) => setFormName(e.target.value)}
-                className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
                 placeholder="My MySQL DB"
               />
             </div>
 
             <div className="flex flex-col gap-1">
-              <label className="text-[10px] text-neutral-400">TYPE</label>
+              <label className="text-[10px] text-muted-sem">TYPE</label>
               <select
                 value={formDbType}
                 onChange={(e) => setFormDbType(e.target.value)}
-                className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
               >
                 <option value="sqlite">SQLite</option>
                 <option value="postgresql">PostgreSQL</option>
@@ -360,13 +374,13 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
 
             {formDbType === "sqlite" ? (
               <div className="flex flex-col gap-1">
-                <label className="text-[10px] text-neutral-400">FILE PATH *</label>
+                <label className="text-[10px] text-muted-sem">FILE PATH *</label>
                 <input
                   type="text"
                   required
                   value={formFilePath}
                   onChange={(e) => setFormFilePath(e.target.value)}
-                  className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                  className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
                   placeholder="/home/user/my_db.db"
                 />
               </div>
@@ -374,23 +388,23 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
               <>
                 <div className="grid grid-cols-3 gap-2">
                   <div className="col-span-2 flex flex-col gap-1">
-                    <label className="text-[10px] text-neutral-400">HOST</label>
+                    <label className="text-[10px] text-muted-sem">HOST</label>
                     <input
                       type="text"
                       required
                       value={formHost}
                       onChange={(e) => setFormHost(e.target.value)}
-                      className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                      className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
                       placeholder="127.0.0.1"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-neutral-400">PORT</label>
+                    <label className="text-[10px] text-muted-sem">PORT</label>
                     <input
                       type="number"
                       value={formPort}
                       onChange={(e) => setFormPort(e.target.value)}
-                      className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                      className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
                       placeholder={formDbType === "postgresql" ? "5432" : "3306"}
                     />
                   </div>
@@ -398,35 +412,35 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-neutral-400">USER</label>
+                    <label className="text-[10px] text-muted-sem">USER</label>
                     <input
                       type="text"
                       value={formUsername}
                       onChange={(e) => setFormUsername(e.target.value)}
-                      className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                      className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
                       placeholder="root"
                     />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[10px] text-neutral-400">PASSWORD</label>
+                    <label className="text-[10px] text-muted-sem">PASSWORD</label>
                     <input
                       type="password"
                       value={formPassword}
                       onChange={(e) => setFormPassword(e.target.value)}
-                      className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                      className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
                       placeholder="pass"
                     />
                   </div>
                 </div>
 
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-neutral-400">DB NAME</label>
+                  <label className="text-[10px] text-muted-sem">DB NAME</label>
                   <input
                     type="text"
                     required
                     value={formDbName}
                     onChange={(e) => setFormDbName(e.target.value)}
-                    className="bg-neutral-900 border border-neutral-800 rounded p-1 text-white text-xs"
+                    className="bg-input-sem border border-border-sem rounded p-1 text-foreground-sem text-xs"
                     placeholder="my_database"
                   />
                 </div>
@@ -445,9 +459,9 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
 
         {/* List of Tables */}
         <div className="flex flex-col gap-2 mt-2">
-          <h3 className="text-xs text-neutral-400 font-mono tracking-wider uppercase">Tables List</h3>
+          <h3 className="text-xs text-muted-sem font-mono tracking-wider uppercase">Tables List</h3>
           {tables.length === 0 ? (
-            <div className="text-xs font-mono text-neutral-500 italic p-3 border border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg text-center">
+            <div className="text-xs font-mono text-muted-sem italic p-3 border border-dashed border-border-sem rounded-lg text-center">
               No tables found
             </div>
           ) : (
@@ -462,8 +476,8 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
                   }}
                   className={`text-left p-2 rounded-lg border transition-all ${
                     selectedTable === tbl && !isQueryView
-                      ? "border-cobalt bg-cobalt/10 text-white"
-                      : "border-neutral-200 dark:border-neutral-800 text-neutral-400 hover:text-foreground hover:bg-neutral-50/30"
+                      ? "border-cobalt bg-cobalt/10 text-cobalt font-bold"
+                      : "border-border-sem text-muted-sem hover:text-foreground-sem hover:bg-input-sem"
                   }`}
                 >
                   {tbl}
@@ -477,12 +491,12 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
       {/* Main Content Area */}
       <article className="lg:col-span-3 flex flex-col gap-6">
         {/* Top Control Bar */}
-        <div className="flex flex-wrap justify-between items-center p-4 border border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/10 rounded-lg gap-4">
+        <div className="flex flex-wrap justify-between items-center p-4 border border-border-sem bg-card-sem rounded-lg gap-4">
           <div className="flex flex-col">
-            <span className="text-[10px] text-neutral-400 font-mono uppercase tracking-widest">
+            <span className="text-[10px] text-muted-sem font-mono uppercase tracking-widest">
               Selected Database
             </span>
-            <span className="text-sm font-bold tracking-tight">
+            <span className="text-sm font-bold tracking-tight text-foreground-sem">
               {databases.find((d) => d.id === selectedDbId)?.name || "cPanel SQLite DB"}
             </span>
           </div>
@@ -495,7 +509,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
             className={`px-3 py-1.5 font-mono text-xs rounded border transition-all ${
               isQueryView
                 ? "bg-cobalt border-cobalt text-white font-bold"
-                : "border-neutral-200 dark:border-neutral-800 text-neutral-400 hover:text-foreground"
+                : "border-border-sem text-muted-sem hover:text-foreground-sem"
             }`}
           >
             SQL QUERY EDITOR
@@ -511,8 +525,8 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
         {/* Dynamic Inner Panel */}
         {isQueryView ? (
           /* RAW SQL QUERY VIEWER */
-          <div className="flex flex-col gap-4 border border-neutral-200 dark:border-neutral-800 p-4 rounded-lg bg-neutral-50/50 dark:bg-neutral-900/10">
-            <h3 className="text-xs font-mono text-neutral-400 tracking-wider uppercase border-b border-neutral-200 dark:border-neutral-800 pb-2">
+          <div className="flex flex-col gap-4 border border-border-sem p-4 rounded-lg bg-card-sem">
+            <h3 className="text-xs font-mono text-muted-sem tracking-wider uppercase border-b border-border-sem pb-2">
               Execute SQL query on dynamic connection
             </h3>
 
@@ -521,7 +535,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
                 value={rawQuery}
                 onChange={(e) => setRawQuery(e.target.value)}
                 rows={5}
-                className="bg-neutral-950 text-neutral-100 font-mono text-xs border border-neutral-800 rounded-lg p-2.5 w-full focus:outline-none focus:border-cobalt"
+                className="bg-input-sem text-foreground-sem font-mono text-xs border border-border-sem rounded-lg p-2.5 w-full focus:outline-none focus:border-cobalt"
                 placeholder="SELECT * FROM users LIMIT 10;"
               />
             </div>
@@ -537,8 +551,8 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
             </div>
 
             {queryResult && (
-              <div className="flex flex-col gap-3 mt-4 border-t border-neutral-200 dark:border-neutral-800 pt-4">
-                <div className="flex justify-between items-center text-[10px] text-neutral-400 font-mono uppercase">
+              <div className="flex flex-col gap-3 mt-4 border-t border-border-sem pt-4">
+                <div className="flex justify-between items-center text-[10px] text-muted-sem font-mono uppercase">
                   <span>Execution Time: {queryResult.execution_time_ms} ms</span>
                   <span>Rows Affected: {queryResult.rows_affected}</span>
                 </div>
@@ -548,28 +562,28 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
                     ERROR: {queryResult.error}
                   </div>
                 ) : queryResult.columns.length === 0 ? (
-                  <div className="text-xs text-neutral-400 font-mono p-3 border border-neutral-800 rounded-lg bg-neutral-900/40 italic">
+                  <div className="text-xs text-muted-sem font-mono p-3 border border-border-sem rounded-lg bg-input-sem italic">
                     Query successfully executed. No output returned.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto border border-neutral-200 dark:border-neutral-800 rounded-lg max-h-96">
-                    <table className="w-full border-collapse text-left font-mono text-xs text-neutral-300">
-                      <thead className="bg-neutral-900/80 border-b border-neutral-200 dark:border-neutral-800 font-bold text-neutral-400">
+                  <div className="overflow-x-auto border border-border-sem rounded-lg max-h-96">
+                    <table className="w-full border-collapse text-left font-mono text-xs text-foreground-sem">
+                      <thead className="bg-input-sem border-b border-border-sem font-bold text-muted-sem">
                         <tr>
                           {queryResult.columns.map((col) => (
-                            <th key={col} className="p-2.5 border-r border-neutral-800">
+                            <th key={col} className="p-2.5 border-r border-border-sem">
                               {col}
                             </th>
                           ))}
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-neutral-800">
+                      <tbody className="divide-y divide-border-sem">
                         {queryResult.rows.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-neutral-800/30">
+                          <tr key={idx} className="hover:bg-input-sem">
                             {row.map((val, cellIdx) => (
-                              <td key={cellIdx} className="p-2.5 border-r border-neutral-800 truncate max-w-xs">
+                              <td key={cellIdx} className="p-2.5 border-r border-border-sem truncate max-w-xs">
                                 {val === null ? (
-                                  <span className="text-neutral-600 italic">NULL</span>
+                                  <span className="text-muted-sem italic">NULL</span>
                                 ) : typeof val === "boolean" ? (
                                   val ? "TRUE" : "FALSE"
                                 ) : (
@@ -588,15 +602,15 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
           </div>
         ) : selectedTable ? (
           /* TABLE BROWSING / SCHEMA VIEW */
-          <div className="flex flex-col gap-4 border border-neutral-200 dark:border-neutral-800 p-4 rounded-lg bg-neutral-50/50 dark:bg-neutral-900/10">
+          <div className="flex flex-col gap-4 border border-border-sem p-4 rounded-lg bg-card-sem">
             {/* Table inner sub tabs */}
-            <div className="flex border-b border-neutral-200 dark:border-neutral-800">
+            <div className="flex border-b border-border-sem">
               <button
                 onClick={() => setTableTab("browse")}
                 className={`py-1.5 px-3 font-mono text-xs uppercase border-b-2 transition-all ${
                   tableTab === "browse"
-                    ? "border-cobalt text-foreground font-bold"
-                    : "border-transparent text-neutral-400 hover:text-foreground"
+                    ? "border-cobalt text-foreground-sem font-bold"
+                    : "border-transparent text-muted-sem hover:text-foreground-sem"
                 }`}
               >
                 Browse Data
@@ -605,8 +619,8 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
                 onClick={() => setTableTab("structure")}
                 className={`py-1.5 px-3 font-mono text-xs uppercase border-b-2 transition-all ${
                   tableTab === "structure"
-                    ? "border-cobalt text-foreground font-bold"
-                    : "border-transparent text-neutral-400 hover:text-foreground"
+                    ? "border-cobalt text-foreground-sem font-bold"
+                    : "border-transparent text-muted-sem hover:text-foreground-sem"
                 }`}
               >
                 Structure / Schema
@@ -615,9 +629,9 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
 
             {tableTab === "structure" ? (
               /* TABLE SCHEMA STRUCTURE VIEW */
-              <div className="overflow-x-auto border border-neutral-200 dark:border-neutral-800 rounded-lg mt-2">
-                <table className="w-full border-collapse text-left font-mono text-xs text-neutral-300">
-                  <thead className="bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 font-bold text-neutral-400">
+              <div className="overflow-x-auto border border-border-sem rounded-lg mt-2">
+                <table className="w-full border-collapse text-left font-mono text-xs text-foreground-sem">
+                  <thead className="bg-input-sem border-b border-border-sem font-bold text-muted-sem">
                     <tr>
                       <th className="p-2.5">COLUMN</th>
                       <th className="p-2.5">TYPE</th>
@@ -626,16 +640,16 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
                       <th className="p-2.5">DEFAULT</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-neutral-800 bg-neutral-900/10">
+                  <tbody className="divide-y divide-border-sem bg-input-sem/10">
                     {schema.map((col) => (
-                      <tr key={col.name} className="hover:bg-neutral-800/30">
-                        <td className="p-2.5 font-bold text-neutral-200">{col.name}</td>
-                        <td className="p-2.5 text-neutral-400">{col.type}</td>
+                      <tr key={col.name} className="hover:bg-input-sem">
+                        <td className="p-2.5 font-bold text-foreground-sem">{col.name}</td>
+                        <td className="p-2.5 text-muted-sem">{col.type}</td>
                         <td className="p-2.5">{col.nullable ? "Yes" : "No"}</td>
                         <td className="p-2.5 text-cobalt">{col.primary_key ? "PRIMARY" : ""}</td>
                         <td className="p-2.5">
                           {col.default === null ? (
-                            <span className="text-neutral-600 italic">None</span>
+                            <span className="text-muted-sem italic">None</span>
                           ) : (
                             col.default
                           )}
@@ -648,34 +662,34 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
             ) : (
               /* TABLE BROWSE DATA VIEW */
               <div className="flex flex-col gap-4 mt-2">
-                <div className="overflow-x-auto border border-neutral-200 dark:border-neutral-800 rounded-lg max-h-125">
-                  <table className="w-full border-collapse text-left font-mono text-xs text-neutral-300">
-                    <thead className="bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 font-bold text-neutral-400">
+                <div className="overflow-x-auto border border-border-sem rounded-lg max-h-125">
+                  <table className="w-full border-collapse text-left font-mono text-xs text-foreground-sem">
+                    <thead className="bg-input-sem border-b border-border-sem font-bold text-muted-sem">
                       <tr>
                         {columns.map((col) => (
-                          <th key={col} className="p-2 border-r border-neutral-800">
+                          <th key={col} className="p-2 border-r border-border-sem">
                             {col}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-neutral-800 bg-neutral-900/10">
+                    <tbody className="divide-y divide-border-sem bg-input-sem/10">
                       {rows.length === 0 ? (
                         <tr>
                           <td
                             colSpan={columns.length || 1}
-                            className="p-4 text-center text-neutral-500 italic"
+                            className="p-4 text-center text-muted-sem italic"
                           >
                             Table contains no rows
                           </td>
                         </tr>
                       ) : (
                         rows.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-neutral-800/30">
+                          <tr key={idx} className="hover:bg-input-sem">
                             {row.map((val, cellIdx) => (
-                              <td key={cellIdx} className="p-2 border-r border-neutral-800 truncate max-w-xs">
+                              <td key={cellIdx} className="p-2 border-r border-border-sem truncate max-w-xs">
                                 {val === null ? (
-                                  <span className="text-neutral-600 italic">NULL</span>
+                                  <span className="text-muted-sem italic">NULL</span>
                                 ) : typeof val === "boolean" ? (
                                   val ? "TRUE" : "FALSE"
                                 ) : (
@@ -696,17 +710,17 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
                     <button
                       disabled={page <= 1}
                       onClick={() => setPage(page - 1)}
-                      className="border border-neutral-200 dark:border-neutral-800 rounded px-2.5 py-1 hover:bg-neutral-800 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      className="border border-border-sem rounded px-2.5 py-1 hover:bg-input-sem disabled:opacity-30 disabled:hover:bg-transparent transition-all"
                     >
                       &lt; PREV
                     </button>
-                    <span className="text-neutral-400 text-[10px]">
+                    <span className="text-muted-sem text-[10px]">
                       PAGE {page} OF {Math.ceil(totalRecords / constLimit)} ({totalRecords} RECORDS)
                     </span>
                     <button
                       disabled={page * constLimit >= totalRecords}
                       onClick={() => setPage(page + 1)}
-                      className="border border-neutral-200 dark:border-neutral-800 rounded px-2.5 py-1 hover:bg-neutral-800 disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      className="border border-border-sem rounded px-2.5 py-1 hover:bg-input-sem disabled:opacity-30 disabled:hover:bg-transparent transition-all"
                     >
                       NEXT &gt;
                     </button>
@@ -717,9 +731,9 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
           </div>
         ) : (
           /* INITIAL EMPTY VIEW */
-          <div className="border border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg p-12 text-center text-neutral-400 font-mono text-xs flex flex-col justify-center items-center gap-3">
+          <div className="border border-dashed border-border-sem rounded-lg p-12 text-center text-muted-sem font-mono text-xs flex flex-col justify-center items-center gap-3">
             <svg
-              className="w-12 h-12 text-neutral-600"
+              className="w-12 h-12 text-muted-sem"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -732,7 +746,7 @@ export default function DatabasesTab({ token, addLog }: DatabasesTabProps) {
               />
             </svg>
             <p>Select a table from the sidebar list to browse schema / rows</p>
-            <p className="text-neutral-600 text-[10px]">
+            <p className="text-muted-sem text-[10px]">
               Or open the SQL Query Editor at the top to write raw commands
             </p>
           </div>

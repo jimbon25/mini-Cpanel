@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Editor from "@monaco-editor/react";
+import { apiClient } from "@/app/utils/apiClient";
+import { useNotification } from "@/app/context/NotificationContext";
+import { formatBytes } from "@/app/utils/helpers";
 
 export interface FileItem {
   name: string;
@@ -14,13 +17,7 @@ interface FileExplorerTabProps {
   addLog: (msg: string) => void;
 }
 
-const formatBytes = (bytes: number) => {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
-};
+
 
 const detectLanguage = (path: string): string => {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -52,6 +49,8 @@ const detectLanguage = (path: string): string => {
 };
 
 export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps) {
+  const { showToast, confirm } = useNotification();
+
   const [currentPath, setCurrentPath] = useState<string>("");
   const [files, setFiles] = useState<FileItem[]>([]);
   const [newItemName, setNewItemName] = useState<string>("");
@@ -61,6 +60,13 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
   const [dragging, setDragging] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches;
+    }
+    return true;
+  });
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setIsClient(true);
@@ -68,12 +74,21 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
     return () => clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const media = window.matchMedia("(prefers-color-scheme: dark)");
+      const listener = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
+      media.addEventListener("change", listener);
+      return () => media.removeEventListener("change", listener);
+    }
+  }, []);
+
   const isTestEnv = typeof window === "undefined" || (typeof process !== "undefined" && process.env.NODE_ENV === "test");
 
   const fetchFiles = useCallback(async (path: string) => {
     setFileError("");
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/files/list?path=${encodeURIComponent(path)}`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/files/list?path=${encodeURIComponent(path)}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -100,7 +115,7 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
     const targetPath = currentPath ? `${currentPath}/${newItemName}` : newItemName;
     try {
       if (newItemType === "folder") {
-        const response = await fetch("http://localhost:8080/api/v1/files/mkdir", {
+        const response = await apiClient.fetch("http://localhost:8080/api/v1/files/mkdir", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -110,9 +125,10 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
         });
 
         if (!response.ok) throw new Error("Failed to create folder");
+        showToast(`Folder '${newItemName}' created successfully`, "success");
         addLog(`Created directory: /${targetPath}`);
       } else {
-        const response = await fetch("http://localhost:8080/api/v1/files/write", {
+        const response = await apiClient.fetch("http://localhost:8080/api/v1/files/write", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -122,6 +138,7 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
         });
 
         if (!response.ok) throw new Error("Failed to create file");
+        showToast(`File '${newItemName}' created successfully`, "success");
         addLog(`Created file: /${targetPath}`);
       }
 
@@ -132,11 +149,11 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
       setFileError(msg);
       addLog(`File Manager Error: ${msg}`);
     }
-  }, [currentPath, newItemName, newItemType, token, fetchFiles, addLog]);
+  }, [currentPath, newItemName, newItemType, token, fetchFiles, addLog, showToast]);
 
   const handleReadFile = useCallback(async (path: string) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/files/read?path=${encodeURIComponent(path)}`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/files/read?path=${encodeURIComponent(path)}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -158,7 +175,7 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
     if (!editingFile) return;
 
     try {
-      const response = await fetch("http://localhost:8080/api/v1/files/write", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/files/write", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -169,43 +186,48 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
 
       if (!response.ok) throw new Error("Failed to save file");
       
+      showToast("File saved successfully", "success");
       addLog(`Saved file content: /${editingFile.path}`);
       setEditingFile(null);
       fetchFiles(currentPath);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save file";
-      alert(msg);
+      showToast(msg, "error");
       addLog(`File Manager Error: ${msg}`);
     }
-  }, [editingFile, token, currentPath, fetchFiles, addLog]);
+  }, [editingFile, token, currentPath, fetchFiles, showToast, addLog]);
 
-  const handleDeleteItem = useCallback(async (path: string) => {
-    if (!confirm(`Are you sure you want to delete /${path}?`)) return;
+  const handleDeleteItem = useCallback((path: string) => {
+    confirm({
+      message: `Are you sure you want to delete /${path}?`,
+      onConfirm: async () => {
+        try {
+          const response = await apiClient.fetch(`http://localhost:8080/api/v1/files?path=${encodeURIComponent(path)}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
 
-    try {
-      const response = await fetch(`http://localhost:8080/api/v1/files?path=${encodeURIComponent(path)}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+          if (!response.ok) throw new Error("Failed to delete item");
 
-      if (!response.ok) throw new Error("Failed to delete item");
-
-      addLog(`Deleted item: /${path}`);
-      fetchFiles(currentPath);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to delete";
-      setFileError(msg);
-      addLog(`File Manager Error: ${msg}`);
-    }
-  }, [token, currentPath, fetchFiles, addLog]);
+          showToast("Item deleted successfully", "success");
+          addLog(`Deleted item: /${path}`);
+          fetchFiles(currentPath);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Failed to delete";
+          setFileError(msg);
+          addLog(`File Manager Error: ${msg}`);
+        }
+      }
+    });
+  }, [token, currentPath, fetchFiles, confirm, showToast, addLog]);
 
   // ZIP and UNZIP operation handlers
   const handleZipItem = useCallback(async (path: string) => {
     addLog(`Compressing /${path} to ZIP...`);
     try {
-      const response = await fetch("http://localhost:8080/api/v1/files/zip", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/files/zip", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -219,6 +241,7 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
         throw new Error(data.detail || "Failed to compress item");
       }
 
+      showToast("Archive compressed successfully", "success");
       addLog(`Compressed /${path} to ZIP archive.`);
       fetchFiles(currentPath);
     } catch (err) {
@@ -226,12 +249,12 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
       setFileError(msg);
       addLog(`File Manager Error: ${msg}`);
     }
-  }, [token, currentPath, fetchFiles, addLog]);
+  }, [token, currentPath, fetchFiles, showToast, addLog]);
 
   const handleUnzipItem = useCallback(async (path: string) => {
     addLog(`Decompressing archive /${path}...`);
     try {
-      const response = await fetch("http://localhost:8080/api/v1/files/unzip", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/files/unzip", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -245,6 +268,7 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
         throw new Error(data.detail || "Failed to extract zip file");
       }
 
+      showToast("Archive extracted successfully", "success");
       addLog(`Extracted ZIP archive successfully: /${path}`);
       fetchFiles(currentPath);
     } catch (err) {
@@ -252,8 +276,9 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
       setFileError(msg);
       addLog(`File Manager Error: ${msg}`);
     }
-  }, [token, currentPath, fetchFiles, addLog]);
+  }, [token, currentPath, fetchFiles, showToast, addLog]);
 
+  // Drag-and-Drop file uploads
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setDragging(true);
@@ -279,7 +304,7 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
       formData.append("file", file);
 
       try {
-        const response = await fetch(`http://localhost:8080/api/v1/files/upload?path=${encodeURIComponent(currentPath)}`, {
+        const response = await apiClient.fetch(`http://localhost:8080/api/v1/files/upload?path=${encodeURIComponent(currentPath)}`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -308,6 +333,7 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
     setCurrentPath(parts.join("/"));
   }, [currentPath]);
 
+  // Load files on mount or path change
   useEffect(() => {
     if (token) {
       const timer = setTimeout(() => {
@@ -475,16 +501,16 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
 
       {/* Inline Monaco Text Editor (Modal or Overlay) */}
       {editingFile && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-4xl flat-card bg-canvas-dark text-neutral-100 flex flex-col h-[80vh] border-neutral-800 rounded-lg overflow-hidden">
-            <header className="flex justify-between items-center p-4 border-b border-neutral-800">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-4xl flat-card bg-canvas-light dark:bg-canvas-dark text-foreground-sem flex flex-col h-[80vh] border-border-sem rounded-lg overflow-hidden">
+            <header className="flex justify-between items-center p-4 border-b border-border-sem">
               <div>
                 <h3 className="text-xs font-mono font-bold text-neutral-400">EDITING FILE</h3>
-                <p className="text-xs font-mono text-white mt-0.5">/{editingFile.path}</p>
+                <p className="text-xs font-mono text-foreground-sem mt-0.5">/{editingFile.path}</p>
               </div>
               <button
                 onClick={() => setEditingFile(null)}
-                className="text-xs text-neutral-400 hover:text-white font-mono"
+                className="text-xs text-neutral-400 hover:text-foreground-sem font-mono"
               >
                 CLOSE
               </button>
@@ -495,15 +521,15 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
               <textarea
                 value={editingFile.content}
                 onChange={(e) => setEditingFile({ ...editingFile, content: e.target.value })}
-                className="flex-1 p-4 bg-canvas-dark text-neutral-300 font-mono text-xs resize-none focus:outline-none focus:ring-0 border-0"
+                className="flex-1 p-4 bg-canvas-light dark:bg-canvas-dark text-foreground-sem font-mono text-xs resize-none focus:outline-none focus:ring-0 border-0"
                 spellCheck={false}
                 placeholder="# Write content here..."
               />
             ) : (
-              <div className="flex-1 w-full bg-canvas-dark relative min-h-75">
+              <div className="flex-1 w-full bg-canvas-light dark:bg-canvas-dark relative min-h-75">
                 <Editor
                   height="100%"
-                  theme="vs-dark"
+                  theme={isDarkMode ? "vs-dark" : "light"}
                   language={detectLanguage(editingFile.path)}
                   value={editingFile.content}
                   onChange={(val) => setEditingFile({ ...editingFile, content: val || "" })}
@@ -518,16 +544,16 @@ export default function FileExplorerTab({ token, addLog }: FileExplorerTabProps)
               </div>
             )}
             
-            <footer className="flex justify-end gap-3 p-4 border-t border-neutral-800 bg-neutral-900/10">
+            <footer className="flex justify-end gap-3 p-4 border-t border-border-sem bg-neutral-900/10">
               <button
                 onClick={() => setEditingFile(null)}
-                className="border border-neutral-800 rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-white hover:border-neutral-700 transition-all"
+                className="border border-border-sem rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-foreground-sem hover:border-border-sem/85 transition-all"
               >
                 CANCEL
               </button>
               <button
                 onClick={handleSaveFile}
-                className="border border-cobalt rounded px-4 py-2 text-xs font-mono text-white bg-cobalt hover:bg-[#2c4eff] transition-all"
+                className="border border-accent-sem rounded px-4 py-2 text-xs font-mono text-white bg-accent-sem hover:bg-accent-sem/80 transition-all"
               >
                 SAVE CHANGES
               </button>

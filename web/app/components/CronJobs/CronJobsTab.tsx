@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { formatLocalDateTime } from "@/app/utils/date";
+import { apiClient } from "@/app/utils/apiClient";
+import { useNotification } from "@/app/context/NotificationContext";
 
 
 export interface CronJobResponse {
@@ -25,26 +27,30 @@ interface CronJobsTabProps {
 }
 
 export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
+  const { showToast, confirm } = useNotification();
   const [projects, setProjects] = useState<ProjectBrief[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   
+  // Form states
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [jobName, setJobName] = useState("");
   const [jobCommand, setJobCommand] = useState("");
   
+  // Interactive builder states
   const [bMinute, setBMinute] = useState("*/5");
   const [bHour, setBHour] = useState("*");
   const [bDay, setBDay] = useState("*");
   const [bMonth, setBMonth] = useState("*");
   const [bDayOfWeek, setBDayOfWeek] = useState("*");
 
+  // Output modal state
   const [selectedOutput, setSelectedOutput] = useState<{ name: string; output: string | null } | null>(null);
 
   const fetchCronData = useCallback(async () => {
     setError("");
     try {
-      const response = await fetch("http://localhost:8080/api/v1/projects", {
+      const response = await apiClient.fetch("http://localhost:8080/api/v1/projects", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -62,8 +68,10 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
     }
   }, [token, selectedProjectId, addLog]);
 
+  // Sync interactive builder to schedule string
   const jobSchedule = `${bMinute} ${bHour} ${bDay} ${bMonth} ${bDayOfWeek}`;
 
+  // Apply predefined preset
   const applyPreset = (preset: string) => {
     if (preset === "minute") {
       setBMinute("*"); setBHour("*"); setBDay("*"); setBMonth("*"); setBDayOfWeek("*");
@@ -86,7 +94,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
 
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/projects/${selectedProjectId}/cron`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/projects/${selectedProjectId}/cron`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -105,14 +113,16 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
         throw new Error(errorData.detail || "Failed to create scheduled job");
       }
 
+      showToast(`Cron job '${jobName}' configured successfully`, "success");
       addLog(`Created cron job '${jobName}' on schedule '${jobSchedule}'`);
       setJobName("");
       setJobCommand("");
+      // Reset builder to default 5 mins
       setBMinute("*/5"); setBHour("*"); setBDay("*"); setBMonth("*"); setBDayOfWeek("*");
       fetchCronData();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Creation failed";
-      alert(msg);
+      showToast(msg, "error");
       addLog(`Scheduler Error: ${msg}`);
     } finally {
       setLoading(false);
@@ -121,7 +131,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
 
   const handleToggleJob = async (projId: string, jobId: string, currentActive: boolean) => {
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/projects/${projId}/cron/${jobId}`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/projects/${projId}/cron/${jobId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -141,24 +151,29 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
     }
   };
 
-  const handleDeleteJob = async (projId: string, jobId: string, jobName: string) => {
-    if (!confirm(`Are you sure you want to delete task '${jobName}'?`)) return;
+  const handleDeleteJob = (projId: string, jobId: string, jobName: string) => {
+    confirm({
+      message: `Are you sure you want to delete task '${jobName}'?`,
+      onConfirm: async () => {
+        try {
+          const response = await apiClient.fetch(`http://localhost:8080/api/v1/projects/${projId}/cron/${jobId}`, {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
 
-    try {
-      const response = await fetch(`http://localhost:8080/api/v1/projects/${projId}/cron/${jobId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) throw new Error("Deletion failed");
-      addLog(`Deleted scheduled task '${jobName}'`);
-      fetchCronData();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to delete task";
-      addLog(`Scheduler Error: ${msg}`);
-    }
+          if (!response.ok) throw new Error("Deletion failed");
+          showToast(`Cron job '${jobName}' deleted successfully`, "success");
+          addLog(`Deleted scheduled task '${jobName}'`);
+          fetchCronData();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Failed to delete task";
+          showToast(msg, "error");
+          addLog(`Scheduler Error: ${msg}`);
+        }
+      }
+    });
   };
 
   useEffect(() => {
@@ -174,6 +189,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
     }
   }, [token, fetchCronData]);
 
+  // Extract all cron jobs from projects
   const allJobs = projects.reduce<{ job: CronJobResponse; projectName: string; projId: string }[]>((acc, proj) => {
     if (proj.cron_jobs) {
       proj.cron_jobs.forEach((job) => {
@@ -214,7 +230,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
                 required
                 value={selectedProjectId}
                 onChange={(e) => setSelectedProjectId(e.target.value)}
-                className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none focus:border-cobalt"
+                className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem"
               >
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -231,7 +247,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
                 required
                 value={jobName}
                 onChange={(e) => setJobName(e.target.value)}
-                className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none"
+                className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem"
                 placeholder="backup-db-daily"
               />
             </div>
@@ -243,7 +259,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
                 required
                 value={jobCommand}
                 onChange={(e) => setJobCommand(e.target.value)}
-                className="bg-neutral-900 border border-neutral-800 rounded-lg p-2.5 text-white focus:outline-none"
+                className="bg-input-sem border border-border-sem rounded-lg p-2.5 text-foreground-sem focus:outline-none focus:border-accent-sem"
                 placeholder="python backup.py --env prod"
               />
             </div>
@@ -255,40 +271,40 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
               </div>
               
               {/* Presets Button Row */}
-              <div className="flex flex-wrap gap-1 mt-1">
-                <button type="button" onClick={() => applyPreset("minute")} className="px-2 py-0.5 border border-neutral-800 hover:border-cobalt rounded text-[9px] hover:text-white transition-all">Every Min</button>
-                <button type="button" onClick={() => applyPreset("5min")} className="px-2 py-0.5 border border-neutral-800 hover:border-cobalt rounded text-[9px] hover:text-white transition-all">5 Min</button>
-                <button type="button" onClick={() => applyPreset("hourly")} className="px-2 py-0.5 border border-neutral-800 hover:border-cobalt rounded text-[9px] hover:text-white transition-all">Hourly</button>
-                <button type="button" onClick={() => applyPreset("daily")} className="px-2 py-0.5 border border-neutral-800 hover:border-cobalt rounded text-[9px] hover:text-white transition-all">Daily</button>
-                <button type="button" onClick={() => applyPreset("weekly")} className="px-2 py-0.5 border border-neutral-800 hover:border-cobalt rounded text-[9px] hover:text-white transition-all">Weekly</button>
-                <button type="button" onClick={() => applyPreset("monthly")} className="px-2 py-0.5 border border-neutral-800 hover:border-cobalt rounded text-[9px] hover:text-white transition-all">Monthly</button>
+              <div className="flex-wrap gap-1 mt-1 flex">
+                <button type="button" onClick={() => applyPreset("minute")} className="px-2 py-0.5 border border-border-sem hover:border-accent-sem rounded text-[9px] hover:text-foreground-sem hover:bg-accent-sem/10 transition-all">Every Min</button>
+                <button type="button" onClick={() => applyPreset("5min")} className="px-2 py-0.5 border border-border-sem hover:border-accent-sem rounded text-[9px] hover:text-foreground-sem hover:bg-accent-sem/10 transition-all">5 Min</button>
+                <button type="button" onClick={() => applyPreset("hourly")} className="px-2 py-0.5 border border-border-sem hover:border-accent-sem rounded text-[9px] hover:text-foreground-sem hover:bg-accent-sem/10 transition-all">Hourly</button>
+                <button type="button" onClick={() => applyPreset("daily")} className="px-2 py-0.5 border border-border-sem hover:border-accent-sem rounded text-[9px] hover:text-foreground-sem hover:bg-accent-sem/10 transition-all">Daily</button>
+                <button type="button" onClick={() => applyPreset("weekly")} className="px-2 py-0.5 border border-border-sem hover:border-accent-sem rounded text-[9px] hover:text-foreground-sem hover:bg-accent-sem/10 transition-all">Weekly</button>
+                <button type="button" onClick={() => applyPreset("monthly")} className="px-2 py-0.5 border border-border-sem hover:border-accent-sem rounded text-[9px] hover:text-foreground-sem hover:bg-accent-sem/10 transition-all">Monthly</button>
               </div>
             </div>
 
             {/* Interactive Picker */}
-            <div className="border border-neutral-200 dark:border-neutral-800 rounded-lg p-3 bg-neutral-900/5 gap-2.5 flex flex-col">
+            <div className="border border-border-sem rounded-lg p-3 bg-neutral-900/5 gap-2.5 flex flex-col">
               <span className="text-[9px] font-bold text-neutral-400 tracking-wide uppercase">Interactive Generator</span>
               
               <div className="grid grid-cols-5 gap-1.5 font-mono text-[9px]">
                 <div className="flex flex-col gap-1">
                   <span className="text-[8px] text-neutral-500">Min</span>
-                  <input type="text" value={bMinute} onChange={(e) => setBMinute(e.target.value)} className="bg-neutral-950 border border-neutral-800 text-center py-1 rounded text-white" />
+                  <input type="text" value={bMinute} onChange={(e) => setBMinute(e.target.value)} className="bg-input-sem border border-border-sem text-center py-1 rounded text-foreground-sem" />
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[8px] text-neutral-500">Hour</span>
-                  <input type="text" value={bHour} onChange={(e) => setBHour(e.target.value)} className="bg-neutral-950 border border-neutral-800 text-center py-1 rounded text-white" />
+                  <input type="text" value={bHour} onChange={(e) => setBHour(e.target.value)} className="bg-input-sem border border-border-sem text-center py-1 rounded text-foreground-sem" />
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[8px] text-neutral-500">Day</span>
-                  <input type="text" value={bDay} onChange={(e) => setBDay(e.target.value)} className="bg-neutral-950 border border-neutral-800 text-center py-1 rounded text-white" />
+                  <input type="text" value={bDay} onChange={(e) => setBDay(e.target.value)} className="bg-input-sem border border-border-sem text-center py-1 rounded text-foreground-sem" />
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[8px] text-neutral-500">Month</span>
-                  <input type="text" value={bMonth} onChange={(e) => setBMonth(e.target.value)} className="bg-neutral-950 border border-neutral-800 text-center py-1 rounded text-white" />
+                  <input type="text" value={bMonth} onChange={(e) => setBMonth(e.target.value)} className="bg-input-sem border border-border-sem text-center py-1 rounded text-foreground-sem" />
                 </div>
                 <div className="flex flex-col gap-1">
                   <span className="text-[8px] text-neutral-500">WDay</span>
-                  <input type="text" value={bDayOfWeek} onChange={(e) => setBDayOfWeek(e.target.value)} className="bg-neutral-950 border border-neutral-800 text-center py-1 rounded text-white" />
+                  <input type="text" value={bDayOfWeek} onChange={(e) => setBDayOfWeek(e.target.value)} className="bg-input-sem border border-border-sem text-center py-1 rounded text-foreground-sem" />
                 </div>
               </div>
             </div>
@@ -296,7 +312,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
             <button
               type="submit"
               disabled={loading || projects.length === 0}
-              className="border border-neutral-200 dark:border-neutral-800 rounded-lg py-2.5 text-xs bg-transparent hover:bg-cobalt hover:text-white hover:border-cobalt transition-all font-mono tracking-wider disabled:opacity-50 mt-2 font-bold"
+              className="border border-border-sem rounded-lg py-2.5 text-xs bg-transparent hover:bg-accent-sem hover:text-white hover:border-accent-sem transition-all font-mono tracking-wider disabled:opacity-50 mt-2 font-bold"
             >
               {loading ? "CONFIGURING..." : "CREATE SCHEDULED TASK"}
             </button>
@@ -319,20 +335,20 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
                 return (
                   <div
                     key={job.id}
-                    className="border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 bg-neutral-50/20 dark:bg-neutral-900/10 flex justify-between items-start font-mono text-xs gap-4"
+                    className="border border-border-sem rounded-lg p-4 bg-card-sem flex justify-between items-start font-mono text-xs gap-4"
                   >
                     <div className="flex-1 flex flex-col gap-1.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-xs text-foreground truncate">{job.name}</span>
-                        <span className="text-[9px] border border-neutral-800 px-1.5 py-0.5 rounded text-neutral-400 tracking-wider">
+                        <span className="text-[9px] border border-border-sem px-1.5 py-0.5 rounded text-neutral-400 tracking-wider">
                           {projectName}
                         </span>
-                        <span className="text-[10px] bg-cobalt/10 border border-cobalt/20 text-cobalt px-2 py-0.5 rounded font-bold">
+                        <span className="text-[10px] bg-accent-sem/10 border border-accent-sem/20 text-accent-sem px-2 py-0.5 rounded font-bold">
                           {job.schedule}
                         </span>
                       </div>
                       
-                      <div className="text-xs text-neutral-400 bg-neutral-950 p-2 rounded-md font-mono mt-1 break-all truncate">
+                      <div className="text-xs text-foreground-sem bg-input-sem border border-border-sem p-2 rounded-md font-mono mt-1 break-all truncate">
                         $ {job.command}
                       </div>
 
@@ -344,7 +360,7 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
                         {job.last_output && (
                           <button
                             onClick={() => setSelectedOutput({ name: job.name, output: job.last_output })}
-                            className="text-cobalt hover:underline cursor-pointer"
+                            className="text-accent-sem hover:underline cursor-pointer"
                           >
                             VIEW LAST OUTPUT
                           </button>
@@ -357,15 +373,15 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
                         onClick={() => handleToggleJob(projId, job.id, job.is_active)}
                         className={`px-3 py-1.5 border rounded transition-all text-[10px] font-bold ${
                           job.is_active
-                            ? "bg-cobalt border-cobalt text-white hover:bg-[#2c4eff]"
-                            : "bg-transparent border-neutral-800 text-neutral-500 hover:text-white"
+                            ? "bg-accent-sem border-accent-sem text-white hover:bg-accent-sem/80"
+                            : "bg-transparent border-border-sem text-neutral-500 hover:text-foreground-sem"
                         }`}
                       >
                         {job.is_active ? "ACTIVE" : "PAUSED"}
                       </button>
                       <button
                         onClick={() => handleDeleteJob(projId, job.id, job.name)}
-                        className="px-2.5 py-1.5 border border-neutral-800 text-neutral-400 hover:text-red-500 hover:border-red-500/30 rounded transition-all text-xs font-bold"
+                        className="px-2.5 py-1.5 border border-border-sem text-neutral-400 hover:text-red-500 hover:border-red-500/30 rounded transition-all text-xs font-bold"
                       >
                         ×
                       </button>
@@ -380,16 +396,16 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
 
       {/* Monospace Output Modal */}
       {selectedOutput && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="w-full max-w-2xl flat-card bg-canvas-dark text-neutral-100 flex flex-col h-[60vh] border-neutral-800 rounded-lg overflow-hidden">
-            <header className="flex justify-between items-center p-4 border-b border-neutral-800">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
+          <div className="w-full max-w-2xl flat-card bg-canvas-light dark:bg-canvas-dark text-foreground-sem flex flex-col h-[60vh] border-border-sem rounded-lg overflow-hidden">
+            <header className="flex justify-between items-center p-4 border-b border-border-sem">
               <div>
                 <h3 className="text-xs font-mono font-bold text-neutral-400">LAST EXECUTION LOG</h3>
-                <p className="text-xs font-mono text-white mt-0.5">{selectedOutput.name}</p>
+                <p className="text-xs font-mono text-foreground-sem mt-0.5">{selectedOutput.name}</p>
               </div>
               <button
                 onClick={() => setSelectedOutput(null)}
-                className="text-xs text-neutral-400 hover:text-white font-mono"
+                className="text-xs text-neutral-400 hover:text-foreground-sem font-mono"
               >
                 CLOSE
               </button>
@@ -399,10 +415,10 @@ export default function CronJobsTab({ token, addLog }: CronJobsTabProps) {
               {selectedOutput.output || "No output logged from last execution."}
             </pre>
             
-            <footer className="flex justify-end p-4 border-t border-neutral-800 bg-neutral-900/10">
+            <footer className="flex justify-end p-4 border-t border-border-sem bg-neutral-900/10">
               <button
                 onClick={() => setSelectedOutput(null)}
-                className="border border-neutral-800 rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-white hover:border-neutral-700 transition-all"
+                className="border border-border-sem rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-foreground-sem hover:border-neutral-400 transition-all"
               >
                 CLOSE
               </button>

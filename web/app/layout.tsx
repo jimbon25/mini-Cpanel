@@ -12,6 +12,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+import { AuthProvider } from "@/app/context/AuthContext";
+import { NotificationProvider } from "@/app/context/NotificationContext";
+
 export const metadata: Metadata = {
   title: "Mini cPanel - Personal Server Dashboard",
   description: "Minimalist server orchestration panel for personal projects",
@@ -29,7 +32,11 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-canvas-light dark:bg-canvas-dark">
         <div className="noise-overlay" />
-        {children}
+        <AuthProvider>
+          <NotificationProvider>
+            {children}
+          </NotificationProvider>
+        </AuthProvider>
       </body>
     </html>
   );

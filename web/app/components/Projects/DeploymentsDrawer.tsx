@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { formatLocalDateTime } from "@/app/utils/date";
+import { apiClient } from "@/app/utils/apiClient";
+import { websocketClient } from "@/app/utils/websocketClient";
 
 export interface Deployment {
   id: string;
@@ -41,7 +43,7 @@ export default function DeploymentsDrawer({
       setTimeout(() => setLoading(true), 0);
     }
     try {
-      const response = await fetch(`http://localhost:8080/api/v1/projects/${projectId}/deployments`, {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/projects/${projectId}/deployments`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -51,6 +53,7 @@ export default function DeploymentsDrawer({
       setDeployments(data);
       setError("");
 
+      // If we have a selected deployment, update its details too (e.g. if it finished building)
       if (selectedDeployment) {
         const updated = data.find((d: Deployment) => d.id === selectedDeployment.id);
         if (updated) {
@@ -66,6 +69,7 @@ export default function DeploymentsDrawer({
     }
   }, [projectId, token, selectedDeployment]);
 
+  // Load and poll deployments
   useEffect(() => {
     let timerId: ReturnType<typeof setTimeout> | null = null;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -104,7 +108,7 @@ export default function DeploymentsDrawer({
     }
 
     const wsUrl = `ws://localhost:8080/api/v1/projects/${projectId}/deployments/${selectedDepId}/stream?token=${encodeURIComponent(token)}`;
-    const ws = new WebSocket(wsUrl);
+    const ws = websocketClient.create(wsUrl);
 
     ws.onmessage = (event) => {
       setWsLogs((prev) => [...prev, event.data]);
@@ -122,6 +126,7 @@ export default function DeploymentsDrawer({
     };
   }, [selectedDepId, isBuilding, token, projectId, isOpen]);
 
+  // Auto scroll in logs view
   useEffect(() => {
     if (selectedDeployment && isOpen) {
       terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -142,38 +147,43 @@ export default function DeploymentsDrawer({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 flex justify-end z-50 bg-black/40 backdrop-blur-xs select-none">
+    <div className="fixed inset-0 flex justify-end z-50 bg-black/40 backdrop-blur-sm select-none">
+      {/* Click outside to close */}
       <div className="flex-1" onClick={handleClose} />
 
+      {/* Drawer Body */}
       <div 
-        className="w-full max-w-xl bg-canvas-dark h-full border-l border-neutral-800 shadow-xl flex flex-col animate-slide-in text-xs"
+        className="w-full max-w-xl bg-card-sem h-full border-l border-border-sem shadow-xl flex flex-col animate-slide-in text-xs text-foreground-sem"
         data-testid="deployments-drawer"
       >
-        <header className="flex justify-between items-center p-4 border-b border-neutral-800 select-none">
+        {/* Header */}
+        <header className="flex justify-between items-center p-4 border-b border-border-sem select-none">
           <div>
-            <h2 className="text-xs font-mono font-bold text-neutral-400">DEPLOYMENT HISTORY</h2>
-            <p className="text-xs font-mono text-white mt-0.5">{projectName}</p>
+            <h2 className="text-xs font-mono font-bold text-muted-sem">DEPLOYMENT HISTORY</h2>
+            <p className="text-xs font-mono text-foreground-sem mt-0.5">{projectName}</p>
           </div>
           
           <button
             onClick={handleClose}
-            className="text-xs text-neutral-400 hover:text-white font-mono border border-neutral-800 hover:border-neutral-700 px-2 py-1 rounded transition-all"
+            className="text-xs text-muted-sem hover:text-foreground-sem font-mono border border-border-sem hover:border-border-sem px-2 py-1 rounded transition-all"
           >
             CLOSE
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto flex flex-col min-h-0 bg-neutral-950/10">
+        {/* Content Area */}
+        <div className="flex-1 overflow-y-auto flex flex-col min-h-0 bg-input-sem/10">
           {error && (
-            <div className="p-4 text-xs text-red-500 font-mono border-b border-neutral-900 bg-red-500/5">
+            <div className="p-4 text-xs text-red-500 font-mono border-b border-border-sem bg-red-500/5">
               Error: {error}
             </div>
           )}
 
           {!selectedDeployment ? (
+            // LIST VIEW
             <div className="p-4 flex flex-col gap-3 flex-1 overflow-y-auto select-none">
               {deployments.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-neutral-500 font-mono italic">
+                <div className="flex-1 flex flex-col items-center justify-center text-muted-sem font-mono italic">
                   {loading ? "Loading deployments..." : "No deployments recorded yet."}
                 </div>
               ) : (
@@ -186,10 +196,10 @@ export default function DeploymentsDrawer({
                     <div
                       key={dep.id}
                       onClick={() => setSelectedDeployment(dep)}
-                      className="border border-neutral-800/80 rounded-lg p-3 bg-neutral-900/30 hover:bg-neutral-900/60 hover:border-neutral-700 transition-all cursor-pointer flex flex-col gap-2"
+                      className="border border-border-sem rounded-lg p-3 bg-card-sem hover:bg-input-sem hover:border-border-sem transition-all cursor-pointer flex flex-col gap-2"
                     >
                       <div className="flex justify-between items-center">
-                        <span className="font-mono text-[10px] text-neutral-500">
+                        <span className="font-mono text-[10px] text-muted-sem">
                           {formatLocalDateTime(dep.created_at)}
                         </span>
                         <span
@@ -200,7 +210,7 @@ export default function DeploymentsDrawer({
                               ? "text-amber-500 border-amber-500/30 bg-amber-500/5 animate-pulse"
                               : isFailed
                               ? "text-red-500 border-red-500/30 bg-red-500/5"
-                              : "text-neutral-400 border-neutral-800"
+                              : "text-muted-sem border-border-sem"
                           }`}
                         >
                           {dep.status}
@@ -209,17 +219,17 @@ export default function DeploymentsDrawer({
 
                       {dep.commit_sha ? (
                         <div className="flex flex-col gap-1">
-                          <div className="font-mono text-neutral-200 truncate max-w-full text-xs font-semibold">
+                          <div className="font-mono text-foreground-sem truncate max-w-full text-xs font-semibold">
                             {dep.commit_message}
                           </div>
-                          <div className="flex items-center gap-1.5 font-mono text-[10px] text-neutral-400">
+                          <div className="flex items-center gap-1.5 font-mono text-[10px] text-muted-sem">
                             <span className="text-cobalt font-bold select-all">{dep.commit_sha.substring(0, 7)}</span>
                             <span>by</span>
-                            <span className="text-neutral-300 font-bold">{dep.commit_author}</span>
+                            <span className="text-foreground-sem font-bold">{dep.commit_author}</span>
                           </div>
                         </div>
                       ) : (
-                        <div className="font-mono text-neutral-400 italic text-[10px]">
+                        <div className="font-mono text-muted-sem italic text-[10px]">
                           Manual deployment trigger
                         </div>
                       )}
@@ -235,11 +245,13 @@ export default function DeploymentsDrawer({
               )}
             </div>
           ) : (
+            // LOGS VIEW
             <div className="flex-1 flex flex-col min-h-0">
-              <div className="flex justify-between items-center px-4 py-2 border-b border-neutral-900 bg-neutral-950/20 text-neutral-400 font-mono text-[10px] select-none">
+              {/* Logs Sub-header */}
+              <div className="flex justify-between items-center px-4 py-2 border-b border-border-sem bg-input-sem text-muted-sem font-mono text-[10px] select-none">
                 <button
                   onClick={() => setSelectedDeployment(null)}
-                  className="hover:text-white transition-all uppercase flex items-center gap-1"
+                  className="hover:text-foreground-sem transition-all uppercase flex items-center gap-1"
                 >
                   ← BACK TO LIST
                 </button>
@@ -259,28 +271,30 @@ export default function DeploymentsDrawer({
                 </div>
               </div>
 
+              {/* Commit info header in logs */}
               {selectedDeployment.commit_sha && (
-                <div className="px-4 py-2 border-b border-neutral-900 bg-neutral-900/10 text-neutral-300 font-mono text-[10px] flex flex-col gap-0.5 select-none">
+                <div className="px-4 py-2 border-b border-border-sem bg-input-sem/30 text-foreground-sem font-mono text-[10px] flex flex-col gap-0.5 select-none">
                   <div>
-                    <span className="text-neutral-500 uppercase mr-2">Commit:</span>
+                    <span className="text-muted-sem uppercase mr-2">Commit:</span>
                     <span className="font-bold">{selectedDeployment.commit_message}</span>
                   </div>
                   <div className="flex gap-4">
                     <div>
-                      <span className="text-neutral-500 uppercase mr-2">Author:</span>
+                      <span className="text-muted-sem uppercase mr-2">Author:</span>
                       <span>{selectedDeployment.commit_author}</span>
                     </div>
                     <div>
-                      <span className="text-neutral-500 uppercase mr-2">SHA:</span>
+                      <span className="text-muted-sem uppercase mr-2">SHA:</span>
                       <span className="text-cobalt font-bold select-all">{selectedDeployment.commit_sha}</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              <div className="flex-1 p-4 overflow-y-auto font-mono text-[11px] text-neutral-300 flex flex-col gap-1.5 select-text bg-neutral-950/40">
+              {/* Log Monospace Output */}
+              <div className="flex-1 p-4 overflow-y-auto font-mono text-[11px] text-foreground-sem flex flex-col gap-1.5 select-text bg-input-sem/20">
                 {logsToRender.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-neutral-500 text-xs select-none">
+                  <div className="h-full flex items-center justify-center text-muted-sem text-xs select-none">
                     {selectedDeployment.status === "building" || selectedDeployment.status === "queued"
                       ? "Build in progress... waiting for logs."
                       : "No logs recorded for this deployment."}
@@ -292,7 +306,7 @@ export default function DeploymentsDrawer({
                     
                     return (
                       <div key={index} className="flex gap-4 items-start leading-relaxed">
-                        <span className="text-[9px] text-neutral-700 w-8 select-none text-right">
+                        <span className="text-[9px] text-muted-sem w-8 select-none text-right">
                           {(index + 1).toString().padStart(3, "0")}
                         </span>
                         <span 
@@ -301,7 +315,7 @@ export default function DeploymentsDrawer({
                               ? "text-cobalt font-bold" 
                               : isError 
                               ? "text-red-400" 
-                              : "text-neutral-300"
+                              : "text-foreground-sem"
                           }
                         >
                           {line}

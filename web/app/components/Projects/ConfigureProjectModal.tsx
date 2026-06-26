@@ -41,6 +41,7 @@ export default function ConfigureProjectModal({
     e.preventDefault();
     if (!projName) return;
 
+    // Convert rows array to line-separated string
     const envList = envVars
       .filter((row) => row.key.trim() !== "")
       .map((row) => `${row.key.trim()}=${row.value.trim()}`);
@@ -61,6 +62,7 @@ export default function ConfigureProjectModal({
       enable_http_ping: enableHttpPing,
     });
 
+    // Reset fields on successful submit
     setProjName("");
     setProjProvider("docker");
     setProjGitRepo("");
@@ -118,18 +120,18 @@ export default function ConfigureProjectModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in"
       data-testid="configure-project-modal"
     >
-      <div className="w-full max-w-lg flat-card bg-canvas-dark text-neutral-100 flex flex-col border-neutral-800 rounded-lg overflow-hidden">
-        <header className="flex justify-between items-center p-4 border-b border-neutral-800">
+      <div className="w-full max-w-lg flat-card bg-card-sem text-foreground-sem flex flex-col border-border-sem rounded-lg overflow-hidden">
+        <header className="flex justify-between items-center p-4 border-b border-border-sem">
           <div>
-            <h3 className="text-xs font-mono font-bold text-neutral-400">CONFIGURE NEW DEPLOYMENT</h3>
-            <p className="text-xs font-mono text-white mt-0.5">Define runtime & deployment options</p>
+            <h3 className="text-xs font-mono font-bold text-muted-sem">CONFIGURE NEW DEPLOYMENT</h3>
+            <p className="text-xs font-mono text-foreground-sem mt-0.5">Define runtime & deployment options</p>
           </div>
           <button
             onClick={onClose}
-            className="text-xs text-neutral-400 hover:text-white font-mono"
+            className="text-xs text-muted-sem hover:text-foreground-sem font-mono"
             data-testid="btn-close-modal"
           >
             CLOSE
@@ -142,24 +144,24 @@ export default function ConfigureProjectModal({
           data-testid="configure-project-form"
         >
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Project Name</label>
+            <label className="text-[10px] text-muted-sem uppercase font-bold tracking-wider">Project Name</label>
             <input
               type="text"
               required
               value={projName}
               onChange={(e) => setProjName(e.target.value)}
-              className="bg-neutral-900 border border-neutral-800 rounded p-2.5 text-white focus:outline-none focus:border-cobalt"
+              className="bg-input-sem border border-border-sem rounded p-2.5 text-foreground-sem focus:outline-none focus:border-cobalt"
               placeholder="my-awesome-app"
               data-testid="input-proj-name"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Provider Engine</label>
+            <label className="text-[10px] text-muted-sem uppercase font-bold tracking-wider">Provider Engine</label>
             <select
               value={projProvider}
               onChange={(e) => setProjProvider(e.target.value)}
-              className="bg-neutral-900 border border-neutral-800 rounded p-2.5 text-white focus:outline-none focus:border-cobalt"
+              className="bg-input-sem border border-border-sem rounded p-2.5 text-foreground-sem focus:outline-none focus:border-cobalt"
               data-testid="select-proj-provider"
             >
               <option value="docker">Docker Container (Universal)</option>
@@ -169,12 +171,12 @@ export default function ConfigureProjectModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Git Repository URL (Optional)</label>
+            <label className="text-[10px] text-muted-sem uppercase font-bold tracking-wider">Git Repository URL (Optional)</label>
             <input
               type="url"
               value={projGitRepo}
               onChange={(e) => setProjGitRepo(e.target.value)}
-              className="bg-neutral-900 border border-neutral-800 rounded p-2.5 text-white focus:outline-none focus:border-cobalt"
+              className="bg-input-sem border border-border-sem rounded p-2.5 text-foreground-sem focus:outline-none focus:border-cobalt"
               placeholder="https://github.com/username/repo.git"
               data-testid="input-proj-git"
             />
@@ -182,39 +184,39 @@ export default function ConfigureProjectModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Git Branch</label>
+              <label className="text-[10px] text-muted-sem uppercase font-bold tracking-wider">Git Branch</label>
               <input
                 type="text"
                 value={projBranch}
                 onChange={(e) => setProjBranch(e.target.value)}
-                className="bg-neutral-900 border border-neutral-800 rounded p-2.5 text-white focus:outline-none focus:border-cobalt"
+                className="bg-input-sem border border-border-sem rounded p-2.5 text-foreground-sem focus:outline-none focus:border-cobalt"
                 placeholder="main"
                 data-testid="input-proj-branch"
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Static Port (Optional)</label>
+              <label className="text-[10px] text-muted-sem uppercase font-bold tracking-wider">Static Port (Optional)</label>
               <input
                 type="number"
                 value={projPort}
                 onChange={(e) => setProjPort(e.target.value)}
-                className="bg-neutral-900 border border-neutral-800 rounded p-2.5 text-white focus:outline-none focus:border-cobalt"
+                className="bg-input-sem border border-border-sem rounded p-2.5 text-foreground-sem focus:outline-none focus:border-cobalt"
                 placeholder="Auto allocate if blank"
                 data-testid="input-proj-port"
               />
             </div>
           </div>
 
-          <div className="flex items-center justify-between bg-neutral-900 border border-neutral-800 rounded p-3">
+          <div className="flex items-center justify-between bg-input-sem border border-border-sem rounded p-3">
             <div>
-              <p className="text-xs text-white font-mono">Enable HTTP Health Check</p>
-              <p className="text-[10px] text-neutral-500 mt-0.5">Disable for bots, workers, or services without a web server</p>
+              <p className="text-xs text-foreground-sem font-mono">Enable HTTP Health Check</p>
+              <p className="text-[10px] text-muted-sem mt-0.5">Disable for bots, workers, or services without a web server</p>
             </div>
             <button
               type="button"
               id="toggle-enable-http-ping"
               onClick={() => setEnableHttpPing(!enableHttpPing)}
-              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${enableHttpPing ? "bg-cobalt" : "bg-neutral-700"}`}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${enableHttpPing ? "bg-cobalt" : "bg-border-sem"}`}
               data-testid="toggle-http-ping"
             >
               <span
@@ -225,7 +227,7 @@ export default function ConfigureProjectModal({
 
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center">
-              <label className="text-[10px] text-neutral-400 uppercase font-bold tracking-wider">Start Command (Optional)</label>
+              <label className="text-[10px] text-muted-sem uppercase font-bold tracking-wider">Start Command (Optional)</label>
               <button
                 type="button"
                 onClick={() => setShowHelp(!showHelp)}
@@ -238,30 +240,30 @@ export default function ConfigureProjectModal({
               type="text"
               value={projStartCommand}
               onChange={(e) => setProjStartCommand(e.target.value)}
-              className="bg-neutral-900 border border-neutral-800 rounded p-2.5 text-white focus:outline-none focus:border-cobalt font-mono"
+              className="bg-input-sem border border-border-sem rounded p-2.5 text-foreground-sem focus:outline-none focus:border-cobalt font-mono"
               placeholder="e.g. python bot.py (Leave blank for default start)"
               data-testid="input-proj-start-command"
             />
             {showHelp && (
-              <div className="bg-neutral-950 border border-neutral-850 rounded p-3 text-[11px] text-neutral-450 font-mono leading-relaxed mt-1 flex flex-col gap-2">
-                <p className="text-white font-bold">💡 How to start your project:</p>
+              <div className="bg-input-sem border border-border-sem rounded p-3 text-[11px] text-muted-sem font-mono leading-relaxed mt-1 flex flex-col gap-2">
+                <p className="text-foreground-sem font-bold">💡 How to start your project:</p>
                 
                 <div className="flex flex-col gap-1">
                   <span className="text-cobalt font-bold">1. Python with Virtualenv (Recommended):</span>
-                  <span>If your repo contains a startup script (e.g. <code className="text-neutral-200">start.sh</code>) that activates your virtualenv:</span>
-                  <code className="text-neutral-200 bg-neutral-900 px-1 py-0.5 rounded w-fit">bash start.sh</code>
+                  <span>If your repo contains a startup script (e.g. <code className="text-foreground-sem">start.sh</code>) that activates your virtualenv:</span>
+                  <code className="text-foreground-sem bg-card-sem px-1 py-0.5 rounded w-fit">bash start.sh</code>
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <span className="text-cobalt font-bold">2. Direct Python/Node execution:</span>
                   <span>For basic files without special virtualenv triggers:</span>
-                  <code className="text-neutral-200 bg-neutral-900 px-1.5 py-0.5 rounded w-fit">python bot.py</code>
-                  <code className="text-neutral-200 bg-neutral-900 px-1.5 py-0.5 rounded w-fit">node index.js</code>
+                  <code className="text-foreground-sem bg-card-sem px-1.5 py-0.5 rounded w-fit">python bot.py</code>
+                  <code className="text-foreground-sem bg-card-sem px-1.5 py-0.5 rounded w-fit">node index.js</code>
                 </div>
 
                 <div className="flex flex-col gap-1">
                   <span className="text-cobalt font-bold">3. Auto-Detection fallback:</span>
-                  <span>If left blank, Mini cPanel auto-runs <code className="text-neutral-200">npm start</code> (if <code className="text-neutral-200">package.json</code> exists) or <code className="text-neutral-200">python main.py</code>.</span>
+                  <span>If left blank, Mini cPanel auto-runs <code className="text-foreground-sem">npm start</code> (if <code className="text-foreground-sem">package.json</code> exists) or <code className="text-foreground-sem">python main.py</code>.</span>
                 </div>
               </div>
             )}
@@ -271,7 +273,7 @@ export default function ConfigureProjectModal({
             <button
               type="button"
               onClick={() => setShowEnvVars(!showEnvVars)}
-              className="flex items-center gap-1.5 text-[10px] text-neutral-400 uppercase font-bold tracking-wider hover:text-white cursor-pointer w-fit transition-all font-mono"
+              className="flex items-center gap-1.5 text-[10px] text-muted-sem uppercase font-bold tracking-wider hover:text-foreground-sem cursor-pointer w-fit transition-all font-mono"
             >
               <span>{showEnvVars ? "▼" : "▶"}</span>
               <span>Environment Variables (Optional)</span>
@@ -287,23 +289,23 @@ export default function ConfigureProjectModal({
                         value={row.key}
                         onChange={(e) => handleRowChange(idx, "key", e.target.value)}
                         onPaste={handlePaste}
-                        className="bg-neutral-900 border border-neutral-800 rounded p-2 text-white text-xs font-mono w-5/12 focus:outline-none focus:border-cobalt"
+                        className="bg-input-sem border border-border-sem rounded p-2 text-foreground-sem text-xs font-mono w-5/12 focus:outline-none focus:border-cobalt"
                         placeholder="KEY (e.g. PORT)"
                         data-testid={`input-env-key-${idx}`}
                       />
-                      <span className="text-neutral-500 font-bold">=</span>
+                      <span className="text-muted-sem font-bold">=</span>
                       <input
                         type="text"
                         value={row.value}
                         onChange={(e) => handleRowChange(idx, "value", e.target.value)}
-                        className="bg-neutral-900 border border-neutral-800 rounded p-2 text-white text-xs font-mono flex-1 focus:outline-none focus:border-cobalt"
+                        className="bg-input-sem border border-border-sem rounded p-2 text-foreground-sem text-xs font-mono flex-1 focus:outline-none focus:border-cobalt"
                         placeholder="value"
                         data-testid={`input-env-val-${idx}`}
                       />
                       <button
                         type="button"
                         onClick={() => handleRemoveRow(idx)}
-                        className="text-neutral-500 hover:text-red-500 p-1 font-mono transition-all text-xs"
+                        className="text-muted-sem hover:text-red-500 p-1 font-mono transition-all text-xs"
                         title="Remove variable"
                       >
                         ×
@@ -327,7 +329,7 @@ export default function ConfigureProjectModal({
             <button
               type="button"
               onClick={onClose}
-              className="border border-neutral-800 rounded px-4 py-2 text-xs font-mono text-neutral-400 hover:text-white hover:border-neutral-700 transition-all"
+              className="border border-border-sem rounded px-4 py-2 text-xs font-mono text-muted-sem hover:text-foreground-sem hover:border-neutral-700 transition-all"
               data-testid="btn-cancel-modal"
             >
               CANCEL
