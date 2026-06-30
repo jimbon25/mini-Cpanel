@@ -16,6 +16,135 @@ cpu_breach_count = 0
 ram_breach_count = 0
 http_failures = {}
 
+def parse_size_to_bytes(size_str: str) -> int:
+    try:
+        size_str = size_str.lower().strip()
+        units = {
+            "b": 1,
+            "k": 1024,
+            "kb": 1024,
+            "m": 1024*1024,
+            "mb": 1024*1024,
+            "mib": 1024*1024,
+            "g": 1024*1024*1024,
+            "gb": 1024*1024*1024,
+            "gib": 1024*1024*1024,
+        }
+        numeric_part = ""
+        unit_part = ""
+        for char in size_str:
+            if char.isdigit() or char == ".":
+                numeric_part += char
+            else:
+                unit_part += char
+        unit_part = unit_part.strip()
+        factor = units.get(unit_part, 1)
+        return int(float(numeric_part) * factor)
+    except Exception:
+        return 0
+
+class ProcessTracker:
+    def __init__(self):
+        self.processes = {}
+
+    def get_process(self, pid: int) -> psutil.Process:
+        import time
+        now = time.time()
+        if pid in self.processes:
+            proc, _ = self.processes[pid]
+            try:
+                if proc.is_running():
+                    self.processes[pid] = (proc, now)
+                    return proc
+            except Exception:
+                pass
+        
+        proc = psutil.Process(pid)
+        try:
+            proc.cpu_percent(interval=None)
+        except Exception:
+            pass
+        self.processes[pid] = (proc, now)
+        
+        stale_pids = [p for p, (_, t) in self.processes.items() if now - t > 60]
+        for p in stale_pids:
+            self.processes.pop(p, None)
+        return proc
+
+_tracker = ProcessTracker()
+
+def get_project_resources(provider: str, name: str) -> tuple[float, int]:
+    """
+    Returns (cpu_percentage, memory_usage_bytes) for the given project.
+    """
+    cpu_percent = 0.0
+    mem_bytes = 0
+    
+    if provider == "docker":
+        if shutil.which("docker"):
+            try:
+                res = subprocess.run(
+                    ["docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}|{{.MemUsage}}", name],
+                    capture_output=True, text=True, timeout=3
+                )
+                if res.returncode == 0:
+                    parts = res.stdout.strip().split("|")
+                    if len(parts) >= 2:
+                        cpu_str = parts[0].replace("%", "").strip()
+                        cpu_percent = float(cpu_str) if cpu_str else 0.0
+                        
+                        mem_part = parts[1].split("/")[0].strip()
+                        mem_bytes = parse_size_to_bytes(mem_part)
+            except Exception as e:
+                logger.debug(f"Docker stats query failed for {name}: {e}")
+                
+    elif provider == "systemd":
+        if shutil.which("systemctl"):
+            try:
+                res = subprocess.run(
+                    ["systemctl", "show", f"{name}.service", "-p", "MainPID"],
+                    capture_output=True, text=True, timeout=2
+                )
+                pid = 0
+                if res.returncode == 0:
+                    line = res.stdout.strip()
+                    if "=" in line:
+                        pid_str = line.split("=")[1].strip()
+                        if pid_str.isdigit():
+                            pid = int(pid_str)
+                
+                if pid > 0:
+                    try:
+                        main_proc = _tracker.get_process(pid)
+                        mem_bytes = main_proc.memory_info().rss
+                        cpu_percent = main_proc.cpu_percent(interval=None)
+                        
+                        for child in main_proc.children(recursive=True):
+                            try:
+                                child_proc = _tracker.get_process(child.pid)
+                                mem_bytes += child_proc.memory_info().rss
+                                cpu_percent += child_proc.cpu_percent(interval=None)
+                            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                                pass
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+                
+                if mem_bytes == 0:
+                    res_mem = subprocess.run(
+                        ["systemctl", "show", f"{name}.service", "-p", "MemoryCurrent"],
+                        capture_output=True, text=True, timeout=2
+                    )
+                    if res_mem.returncode == 0:
+                        line = res_mem.stdout.strip()
+                        if "=" in line:
+                            val = line.split("=")[1].strip()
+                            if val.isdigit() and val != "18446744073709551615":
+                                mem_bytes = int(val)
+            except Exception as e:
+                logger.debug(f"Systemd resource query failed for {name}: {e}")
+                
+    return cpu_percent, mem_bytes
+
 def is_service_running(provider: str, name: str) -> bool:
     """
     Checks if a project service/process is actually active in the OS/Docker background.
@@ -30,7 +159,7 @@ def is_service_running(provider: str, name: str) -> bool:
                     timeout=5
                 )
                 return "true" in result.stdout.strip().lower()
-            return True 
+            return True
             
         elif provider == "systemd":
             if shutil.which("systemctl"):
@@ -73,12 +202,12 @@ def is_service_running(provider: str, name: str) -> bool:
                     timeout=5
                 )
                 return "SERVICE_RUNNING" in result.stdout
-            return True 
+            return True
             
         return True
     except Exception as e:
         logger.error(f"Error checking health for service {name} ({provider}): {e}")
-        return True 
+        return True
 
 def ping_project_http(project: Project) -> tuple[bool, str, int | None]:
     url = None
@@ -232,7 +361,6 @@ def check_system_thresholds(db: Session):
     except Exception as e:
         logger.error(f"Failed to check CPU threshold: {e}")
         
-    # 2. Check RAM
     try:
         mem = psutil.virtual_memory()
         ram_percent = mem.percent

@@ -17,7 +17,16 @@ export default function TerminalTab({ token, addLog, isActive }: TerminalTabProp
   const termInstanceRef = useRef<Terminal | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  
   const [status, setStatus] = useState<"connecting" | "connected" | "disconnected">("connecting");
+  const [fontSize, setFontSize] = useState<number>(13);
+  const fontSizeRef = useRef(fontSize);
+
+  useEffect(() => {
+    fontSizeRef.current = fontSize;
+  }, [fontSize]);
+
+  const [reconnectTrigger, setReconnectTrigger] = useState<number>(0);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       return window.matchMedia("(prefers-color-scheme: dark)").matches;
@@ -34,19 +43,45 @@ export default function TerminalTab({ token, addLog, isActive }: TerminalTabProp
     }
   }, []);
 
+  // Sync font size changes with Xterm instance and resize PTY
+  useEffect(() => {
+    if (termInstanceRef.current) {
+      termInstanceRef.current.options.fontSize = fontSize;
+      try {
+        fitAddonRef.current?.fit();
+        const dimensions = fitAddonRef.current?.proposeDimensions();
+        if (dimensions && wsRef.current?.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              type: "resize",
+              cols: dimensions.cols,
+              rows: dimensions.rows,
+            })
+          );
+        }
+      } catch (e) {
+        console.warn("xterm fit error on font change:", e);
+      }
+    }
+  }, [fontSize]);
+
+  // Main WebSocket Connection & Terminal Initialization
   useEffect(() => {
     if (!token || !terminalRef.current) return;
 
-    // 1. Initialize xterm.js Terminal
+    setStatus("connecting");
+
+    // 1. Initialize xterm.js Terminal with increased scrollback
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: "block",
-      fontSize: 13,
+      fontSize: fontSizeRef.current,
       fontFamily: "Courier New, Courier, monospace",
+      scrollback: 5000,
       theme: {
-        background: isDarkMode ? "#0c0c0e" : "#fbfbfb", // dark canvas vs light background
-        foreground: isDarkMode ? "#d4d4d4" : "#09090b", // light grey text vs dark text
-        cursor: "#2245e3",     // cobalt blue cursor highlight
+        background: isDarkMode ? "#0c0c0e" : "#fbfbfb",
+        foreground: isDarkMode ? "#d4d4d4" : "#09090b",
+        cursor: "#2245e3",
         selectionBackground: isDarkMode ? "rgba(34, 69, 227, 0.3)" : "rgba(34, 69, 227, 0.15)",
         cursorAccent: isDarkMode ? "#0c0c0e" : "#fbfbfb",
       },
@@ -81,7 +116,6 @@ export default function TerminalTab({ token, addLog, isActive }: TerminalTabProp
       const cleanProto = apiEnv.startsWith("https") ? "wss:" : "ws:";
       wsUrl = `${cleanProto}//${cleanHost}/api/v1/system/terminal/ws?token=${encodeURIComponent(token)}`;
     } else {
-      // Local fallback
       wsUrl = `${wsProto}//localhost:8080/api/v1/system/terminal/ws?token=${encodeURIComponent(token)}`;
     }
 
@@ -93,7 +127,6 @@ export default function TerminalTab({ token, addLog, isActive }: TerminalTabProp
       setStatus("connected");
       term.write("\r\n*** WEB SSH TERMINAL INITIALIZED ***\r\n\r\n");
       
-      // Send initial PTY resize message
       const dimensions = fitAddon.proposeDimensions();
       if (dimensions) {
         ws.send(
@@ -139,7 +172,7 @@ export default function TerminalTab({ token, addLog, isActive }: TerminalTabProp
       }
     });
 
-    // 4. Handle Window Resize Events
+    // 4. Set up ResizeObserver to handle element-level resizing (e.g. sidebar toggle)
     const handleResize = () => {
       if (fitAddonRef.current && ws.readyState === WebSocket.OPEN) {
         try {
@@ -160,17 +193,26 @@ export default function TerminalTab({ token, addLog, isActive }: TerminalTabProp
       }
     };
 
-    window.addEventListener("resize", handleResize);
+    const resizeObserver = new ResizeObserver(() => {
+      handleResize();
+    });
+
+    if (terminalRef.current) {
+      resizeObserver.observe(terminalRef.current);
+    }
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      resizeObserver.disconnect();
       if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
       term.dispose();
+      termInstanceRef.current = null;
+      fitAddonRef.current = null;
     };
-  }, [token, addLog, isDarkMode]);
+  }, [token, addLog, isDarkMode, reconnectTrigger]);
 
+  // Handle active tab recalculation
   useEffect(() => {
     if (isActive && fitAddonRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
       const timer = setTimeout(() => {
@@ -208,19 +250,58 @@ export default function TerminalTab({ token, addLog, isActive }: TerminalTabProp
             Shell commands
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`w-2.5 h-2.5 rounded-full ${
-              status === "connected"
-                ? "bg-green-500 animate-pulse"
-                : status === "connecting"
-                ? "bg-yellow-500 animate-pulse"
-                : "bg-red-500"
-            }`}
-          ></span>
-          <span className="text-xs font-mono text-neutral-400 uppercase">
-            {status}
-          </span>
+        <div className="flex items-center gap-3 select-none">
+          {/* Zoom Font Controls */}
+          <div className="flex items-center gap-1.5 border border-border-sem rounded px-1.5 py-0.5 bg-input-sem/20">
+            <button
+              type="button"
+              onClick={() => setFontSize(prev => Math.max(11, prev - 1))}
+              disabled={fontSize <= 11}
+              className="text-xs font-mono text-neutral-400 hover:text-foreground disabled:opacity-30 px-1 cursor-pointer font-bold"
+              title="Decrease font size"
+            >
+              A-
+            </button>
+            <span className="text-[10px] font-mono text-neutral-500 px-0.5">
+              {fontSize}px
+            </span>
+            <button
+              type="button"
+              onClick={() => setFontSize(prev => Math.min(18, prev + 1))}
+              disabled={fontSize >= 18}
+              className="text-xs font-mono text-neutral-400 hover:text-foreground disabled:opacity-30 px-1 cursor-pointer font-bold"
+              title="Increase font size"
+            >
+              A+
+            </button>
+          </div>
+
+          {/* Reconnect Button */}
+          {status === "disconnected" && (
+            <button
+              type="button"
+              onClick={() => setReconnectTrigger(prev => prev + 1)}
+              className="border border-border-sem rounded px-2.5 py-0.5 text-[11px] font-mono hover:bg-accent-sem hover:text-white transition-all cursor-pointer font-bold text-accent-sem"
+            >
+              RECONNECT
+            </button>
+          )}
+
+          {/* Connection Status Badge */}
+          <div className="flex items-center gap-2 border border-border-sem rounded px-2 py-0.5 bg-input-sem/10">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                status === "connected"
+                  ? "bg-green-500 animate-pulse"
+                  : status === "connecting"
+                  ? "bg-yellow-500 animate-pulse"
+                  : "bg-red-500"
+              }`}
+            ></span>
+            <span className="text-[11px] font-mono text-neutral-400 uppercase tracking-wide">
+              {status}
+            </span>
+          </div>
         </div>
       </div>
 

@@ -185,7 +185,7 @@ export default function Sidebar({
                 }}
                 className={`flex items-center gap-2.5 p-2.5 rounded-lg border text-xs font-mono text-left transition-all ${
                   isActive
-                    ? "bg-foreground-sem border-cobalt text-background-sem font-bold"
+                    ? "bg-transparent border-cobalt text-foreground-sem font-bold"
                     : "bg-transparent border-transparent text-muted-sem hover:text-foreground-sem hover:bg-input-sem"
                 }`}
                 data-testid={`tab-${item.id}`}

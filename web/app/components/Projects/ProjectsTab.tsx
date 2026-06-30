@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import ConfigureProjectModal from "./ConfigureProjectModal";
 import DeploymentsDrawer from "./DeploymentsDrawer";
+import EditConfigModal from "./EditConfigModal";
 import { parseUTCDate, formatLocalDateTime } from "@/app/utils/date";
 import { apiClient } from "@/app/utils/apiClient";
+import { formatBytes } from "@/app/utils/helpers";
 import { useNotification } from "@/app/context/NotificationContext";
 
 
@@ -30,6 +32,8 @@ export interface Project {
   ping_latency_ms: number | null;
   ping_error_detail: string | null;
   enable_http_ping: boolean;
+  cpu_usage?: number;
+  memory_usage?: number;
 }
 
 interface ProjectsTabProps {
@@ -53,6 +57,9 @@ export default function ProjectsTab({
   const [deploymentsProjectId, setDeploymentsProjectId] = useState("");
   const [deploymentsProjectName, setDeploymentsProjectName] = useState("");
   const [activeDropdownId, setActiveDropdownId] = useState<string | null>(null);
+  const [configModalOpen, setConfigModalOpen] = useState(false);
+  const [configProjectId, setConfigProjectId] = useState("");
+  const [configProjectName, setConfigProjectName] = useState("");
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -217,6 +224,29 @@ export default function ProjectsTab({
     });
   }, [token, fetchProjects, addLog, confirm, showToast]);
 
+  const handleToggleHttpPing = useCallback(async (projectId: string, currentVal: boolean) => {
+    try {
+      const response = await apiClient.fetch(`http://localhost:8080/api/v1/projects/${projectId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ enable_http_ping: !currentVal }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update ping settings");
+      
+      addLog(`HTTP Ping monitoring ${!currentVal ? "enabled" : "disabled"} for project.`);
+      showToast(`HTTP Ping monitoring ${!currentVal ? "enabled" : "disabled"} successfully.`, "success");
+      fetchProjects();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to toggle ping";
+      addLog(`Projects Error: ${msg}`);
+      showToast(msg, "error");
+    }
+  }, [token, fetchProjects, addLog, showToast]);
+
   const handleAddDomain = useCallback(async (projectId: string, domainName: string) => {
     addLog(`Adding domain mapping ${domainName} to project...`);
     try {
@@ -348,19 +378,26 @@ export default function ProjectsTab({
     });
   }, [token, fetchProjects, addLog, confirm, showToast]);
 
+  const fetchProjectsRef = useRef(fetchProjects);
+  useEffect(() => {
+    fetchProjectsRef.current = fetchProjects;
+  }, [fetchProjects]);
+
   // Load and poll projects
   useEffect(() => {
     if (token) {
-      const timer = setTimeout(() => {
-        fetchProjects();
-      }, 0);
-      const interval = setInterval(fetchProjects, 3000);
+      // Fetch immediately once
+      fetchProjectsRef.current();
+      
+      const interval = setInterval(() => {
+        fetchProjectsRef.current();
+      }, 3000);
+      
       return () => {
-        clearTimeout(timer);
         clearInterval(interval);
       };
     }
-  }, [token, fetchProjects]);
+  }, [token]);
 
   return (
     <section className="flex flex-col gap-6" data-testid="projects-tab">
@@ -490,6 +527,28 @@ export default function ProjectsTab({
                           className="w-full text-left px-3 py-2 text-neutral-700 dark:text-neutral-300 hover:bg-input-sem transition-all font-bold cursor-pointer"
                         >
                           HISTORY
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfigProjectId(project.id);
+                            setConfigProjectName(project.name);
+                            setConfigModalOpen(true);
+                            setActiveDropdownId(null);
+                          }}
+                          className="w-full text-left px-3 py-2 text-neutral-700 dark:text-neutral-300 hover:bg-input-sem transition-all font-bold cursor-pointer"
+                        >
+                          EDIT CONFIG
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleToggleHttpPing(project.id, project.enable_http_ping);
+                            setActiveDropdownId(null);
+                          }}
+                          className="w-full text-left px-3 py-2 text-neutral-700 dark:text-neutral-300 hover:bg-input-sem transition-all font-bold cursor-pointer"
+                        >
+                          {project.enable_http_ping ? "DISABLE PING" : "ENABLE PING"}
                         </button>
                         <div className="border-t border-border-sem my-1" />
                         <button
@@ -698,6 +757,23 @@ export default function ProjectsTab({
                       </div>
                     </details>
                   )}
+
+                  {isOnline && (
+                    <div className="grid grid-cols-2 gap-2 mt-2.5 border border-border-sem/40 bg-input-sem/20 rounded p-2 font-mono text-[11px]" data-testid={`project-metrics-${project.name}`}>
+                      <div className="flex flex-col">
+                        <span className="text-neutral-400 uppercase tracking-wider text-[9px] font-bold">CPU Usage</span>
+                        <span className="text-foreground-sem font-bold mt-0.5" data-testid={`cpu-usage-${project.name}`}>
+                          {project.cpu_usage !== undefined ? `${project.cpu_usage.toFixed(1)}%` : "0.0%"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-neutral-400 uppercase tracking-wider text-[9px] font-bold">RAM Usage</span>
+                        <span className="text-foreground-sem font-bold mt-0.5" data-testid={`ram-usage-${project.name}`}>
+                          {project.memory_usage ? formatBytes(project.memory_usage) : "0 Bytes"}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {isDeploying && (
@@ -752,6 +828,14 @@ export default function ProjectsTab({
         onClose={() => setDeploymentsDrawerOpen(false)}
         projectId={deploymentsProjectId}
         projectName={deploymentsProjectName}
+        token={token}
+      />
+
+      <EditConfigModal
+        isOpen={configModalOpen}
+        onClose={() => setConfigModalOpen(false)}
+        projectId={configProjectId}
+        projectName={configProjectName}
         token={token}
       />
     </section>

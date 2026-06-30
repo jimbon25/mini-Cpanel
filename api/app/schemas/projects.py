@@ -75,6 +75,8 @@ class ProjectResponse(ProjectBase):
     enable_http_ping: bool = True
     domains: List[DomainResponse] = []
     cron_jobs: List[CronJobResponse] = []
+    cpu_usage: Optional[float] = None
+    memory_usage: Optional[int] = None
 
     class Config:
         from_attributes = True

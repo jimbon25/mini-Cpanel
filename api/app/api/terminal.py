@@ -1,10 +1,15 @@
 import os
-import pty
-import fcntl
 import struct
-import termios
 import asyncio
 import logging
+
+try:
+    import pty
+    import fcntl
+    import termios
+    HAS_PTY = True
+except ImportError:
+    HAS_PTY = False
 from jose import jwt, JWTError
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status, Depends
 from app.api.dependencies import RoleChecker
@@ -44,6 +49,8 @@ def verify_ws_token(token: str, db: Session) -> User | None:
 
 
 def set_winsize(fd: int, row: int, col: int):
+    if not HAS_PTY:
+        return
     win = struct.pack("HHHH", row, col, 0, 0)
     fcntl.ioctl(fd, termios.TIOCSWINSZ, win)
 
@@ -55,6 +62,11 @@ async def terminal_ws(
     db: Session = Depends(get_db)
 ):
     logger.info("Terminal WebSocket connection route hit.")
+    if not HAS_PTY:
+        await websocket.accept()
+        await websocket.send_bytes(b"\r\n[Error] Terminal console is only supported on Unix/Linux environments.\r\n")
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+        return
     user = verify_ws_token(token, db)
     if not user:
         logger.warning("Unauthenticated WebSocket connection attempt blocked.")
@@ -79,10 +91,22 @@ async def terminal_ws(
         os.environ["LC_ALL"] = "en_US.UTF-8"
         
         try:
-            os.execvpe("bash", ["bash"], os.environ)
-        except FileNotFoundError:
-            os.execvpe("sh", ["sh"], os.environ)
-        os._exit(1)
+            shell_path = os.environ.get("SHELL")
+            if not shell_path or not os.path.exists(shell_path):
+                for fallback in ["/usr/bin/zsh", "/bin/zsh", "/bin/bash", "/bin/sh"]:
+                    if os.path.exists(fallback):
+                        shell_path = fallback
+                        break
+            
+            if not shell_path:
+                shell_path = "/bin/sh"
+                
+            shell_name = os.path.basename(shell_path)
+            argv0 = f"-{shell_name}"
+            
+            os.execvpe(shell_path, [argv0], os.environ)
+        except Exception:
+            os._exit(1)
 
     fl = fcntl.fcntl(master_fd, fcntl.F_GETFL)
     fcntl.fcntl(master_fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)

@@ -10,8 +10,8 @@ from app.models.base import Project, User, ActivityLog, Domain, CronJob, Deploym
 from app.schemas.projects import ProjectCreate, ProjectUpdate, ProjectResponse, DomainResponse, DomainBase, CronJobCreate, CronJobUpdate, CronJobResponse, DeploymentResponse
 from app.api.dependencies import get_current_user, RoleChecker
 from app.core.deployment import deploy_project_task, start_service, stop_service, log_activity, cleanup_project_service
-from app.core.broadcaster import deployment_broadcaster
 from app.core.ssl import issue_ssl_certificate
+from app.core.broadcaster import deployment_broadcaster
 
 router = APIRouter()
 get_project_user = RoleChecker(["super_admin", "developer"])
@@ -38,7 +38,17 @@ def list_projects(
     """
     List all configured projects.
     """
-    return db.query(Project).all()
+    from app.core.monitor import get_project_resources
+    projects = db.query(Project).all()
+    for project in projects:
+        if project.status == "online":
+            cpu, mem = get_project_resources(project.provider, project.name)
+            project.cpu_usage = cpu
+            project.memory_usage = mem
+        else:
+            project.cpu_usage = 0.0
+            project.memory_usage = 0
+    return projects
 
 @router.post("", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project(
@@ -95,6 +105,16 @@ def get_project(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
+    
+    from app.core.monitor import get_project_resources
+    if project.status == "online":
+        cpu, mem = get_project_resources(project.provider, project.name)
+        project.cpu_usage = cpu
+        project.memory_usage = mem
+    else:
+        project.cpu_usage = 0.0
+        project.memory_usage = 0
+        
     return project
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -400,8 +420,10 @@ async def websocket_logs_stream(
             await websocket.send_text(f"[Systemd] Reading journalctl logs for {project.name}.service...")
             import os
             from app.core.deployment import is_systemd_user_service
+            
             is_root = (os.geteuid() == 0)
             is_user = is_systemd_user_service(f"{project.name}.service")
+            
             journal_cmd = ["journalctl"]
             if is_user:
                 journal_cmd.append("--user")
@@ -466,6 +488,66 @@ async def websocket_logs_stream(
             await websocket.send_text(f"[Error] Stream exception: {str(e)}")
         except Exception:
             pass
+
+@router.websocket("/{project_id}/deployments/{deployment_id}/stream")
+async def websocket_deployment_logs_stream(
+    websocket: WebSocket,
+    project_id: str,
+    deployment_id: str,
+    token: str = Query(...)
+):
+    db = SessionLocal()
+    try:
+        is_authenticated = get_websocket_user(token, db)
+    finally:
+        db.close()
+
+    if not is_authenticated:
+        await websocket.close(code=1008)
+        return
+        
+    await websocket.accept()
+    
+    is_active = False
+    for _ in range(30):
+        async with deployment_broadcaster.lock:
+            if deployment_id in deployment_broadcaster.active_logs:
+                is_active = True
+                break
+        await asyncio.sleep(0.5)
+        
+    if is_active:
+        try:
+            buffer = await deployment_broadcaster.subscribe(deployment_id, websocket)
+            for line in buffer:
+                await websocket.send_text(line)
+                
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            pass
+        finally:
+            await deployment_broadcaster.unsubscribe(deployment_id, websocket)
+    else:
+        db = SessionLocal()
+        try:
+            deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
+            if deployment and deployment.build_logs:
+                for line in deployment.build_logs.split("\n"):
+                    await websocket.send_text(line)
+            else:
+                await websocket.send_text("[System] No active or historical deployment logs found.")
+        except Exception as e:
+            try:
+                await websocket.send_text(f"[Error] Failed to fetch static logs: {str(e)}")
+            except Exception:
+                pass
+        finally:
+            db.close()
+            try:
+                await websocket.close(code=1000)
+            except Exception:
+                pass
 
 
 @router.get("/{project_id}/cron", response_model=List[CronJobResponse])
@@ -742,60 +824,194 @@ def get_project_deployment_details(
         )
     return deployment
 
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from pydantic import BaseModel
 
-@router.websocket("/{project_id}/deployments/{deployment_id}/stream")
-async def websocket_deployment_logs_stream(
-    websocket: WebSocket,
-    project_id: str,
-    deployment_id: str,
-    token: str = Query(...)
-):
-    db = SessionLocal()
-    try:
-        is_authenticated = get_websocket_user(token, db)
-    finally:
-        db.close()
+class WriteConfigRequest(BaseModel):
+    filename: str
+    content: str
+    restart_service: bool = True
 
-    if not is_authenticated:
-        await websocket.close(code=1008)
-        return
-
-    await websocket.accept()
-
-    is_active = False
-    for _ in range(30):
-        async with deployment_broadcaster.lock:
-            if deployment_id in deployment_broadcaster.active_logs:
-                is_active = True
-                break
-        await asyncio.sleep(0.5)
-
-    if is_active:
-        try:
-            buffer = await deployment_broadcaster.subscribe(deployment_id, websocket)
-            for line in buffer:
-                await websocket.send_text(line)
-
-            while True:
-                await websocket.receive_text()
-        except WebSocketDisconnect:
-            pass
-        finally:
-            await deployment_broadcaster.unsubscribe(deployment_id, websocket)
-    else:
-        db = SessionLocal()
-        try:
-            deployment = db.query(Deployment).filter(Deployment.id == deployment_id).first()
-            if deployment and deployment.build_logs:
-                for line in deployment.build_logs.split("\n"):
-                    await websocket.send_text(line)
-            else:
-                await websocket.send_text("[System] No active or historical deployment logs found.")
-        except Exception as e:
+def get_project_config_path(project: Project) -> Path:
+    base_dir = None
+    if project.provider == "systemd":
+        import shutil, subprocess
+        if shutil.which("systemctl"):
             try:
-                await websocket.send_text(f"[System] Error fetching logs: {str(e)}")
+                res = subprocess.run(
+                    ["systemctl", "show", f"{project.name}.service", "-p", "WorkingDirectory"],
+                    capture_output=True, text=True, timeout=2
+                )
+                if res.returncode == 0:
+                    line = res.stdout.strip()
+                    if "=" in line:
+                        dir_str = line.split("=")[1].strip()
+                        if dir_str and os.path.exists(dir_str):
+                            base_dir = Path(dir_str)
             except Exception:
                 pass
-        finally:
-            db.close()
-        await websocket.close()
+                
+    if not base_dir:
+        base_dir = settings.CPANEL_APPS_DIR / project.name
+        
+    return base_dir
+
+def get_secure_project_file_path(project: Project, filename: str) -> Path:
+    base_dir = get_project_config_path(project).resolve()
+    target = (base_dir / filename).resolve()
+    if target != base_dir and base_dir not in target.parents:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: path is outside the project directory"
+        )
+    return target
+
+@router.get("/{project_id}/config/files", response_model=List[str])
+def list_project_config_files(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_user)
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+        
+    base_dir = get_project_config_path(project)
+    if not base_dir.exists() or not base_dir.is_dir():
+        return []
+        
+    common_files = [".env", "config.yml", "config.yaml", "settings.json", "wrangler.toml"]
+    found = []
+    
+    for filename in common_files:
+        file_path = base_dir / filename
+        if file_path.exists() and file_path.is_file():
+            found.append(filename)
+            
+    if not found:
+        try:
+            for entry in os.scandir(base_dir):
+                if entry.is_file() and any(pat in entry.name.lower() for pat in ["config", "env", "settings", "setup"]):
+                    ext = Path(entry.name).suffix.lower()
+                    if ext in [".json", ".yaml", ".yml", ".ini", ".toml", ".conf", ".txt", ""] or entry.name.startswith(".env"):
+                        found.append(entry.name)
+        except Exception:
+            pass
+            
+    found.sort()
+    return found
+
+@router.get("/{project_id}/config/read")
+def read_project_config_file(
+    project_id: str,
+    filename: str = Query(..., description="Name of the configuration file"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_user)
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+        
+    target_file = get_secure_project_file_path(project, filename)
+    if not target_file.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Configuration file '{filename}' does not exist"
+        )
+        
+    if not target_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{filename}' is not a file"
+        )
+        
+    try:
+        file_size = target_file.stat().st_size
+        if file_size > 5 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File is too large to edit inline (max 5MB)"
+            )
+            
+        content = target_file.read_text(encoding="utf-8")
+        return {"filename": filename, "content": content}
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="File is not a valid text file"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to read file: {str(e)}"
+        )
+
+@router.post("/{project_id}/config/write")
+async def write_project_config_file(
+    project_id: str,
+    payload: WriteConfigRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_project_user)
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+        
+    target_file = get_secure_project_file_path(project, payload.filename)
+    if target_file.exists() and not target_file.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Target path is not a file"
+        )
+        
+    try:
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(payload.content, encoding="utf-8")
+        
+        log_entry = ActivityLog(
+            project_id=project.id,
+            event_type="update",
+            message=f"Configuration file '{payload.filename}' was modified."
+        )
+        db.add(log_entry)
+        db.commit()
+        
+        restarted = False
+        if payload.restart_service and project.status == "online":
+            await stop_service(project, db)
+            await start_service(project, db)
+            restarted = True
+            
+            log_restart = ActivityLog(
+                project_id=project.id,
+                event_type="info",
+                message=f"Service restarted automatically to apply config updates."
+            )
+            db.add(log_restart)
+            db.commit()
+            
+        return {
+            "success": True, 
+            "message": f"Successfully wrote config file '{payload.filename}'." + (" Service restarted." if restarted else ""),
+            "restarted": restarted
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to write file: {str(e)}"
+        )
+
+
+
