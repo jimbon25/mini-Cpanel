@@ -2,6 +2,8 @@
 
 A minimalist, lightweight, and self-hosted server orchestration dashboard designed to deploy and monitor personal web applications and background services.
 
+**🌐 Live Demo:** [https://demo.cpanel.dilua.site/](https://demo.cpanel.dilua.site/)
+
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=nextdotjs)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org)
