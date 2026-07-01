@@ -16,6 +16,7 @@ from app.api.databases import router as databases_router
 from app.api.marketplace import router as marketplace_router
 from app.api.terminal import router as terminal_router
 from app.api.users import router as users_router
+from app.api.docker import router as docker_router
 from app.core.scheduler import start_scheduler
 
 
@@ -97,6 +98,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     return response
 
+# Include API Routers
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["Authentication"])
 app.include_router(system_router, prefix=f"{settings.API_V1_STR}/system", tags=["System Metrics"])
 app.include_router(files_router, prefix=f"{settings.API_V1_STR}/files", tags=["File Manager"])
@@ -107,6 +109,7 @@ app.include_router(databases_router, prefix=f"{settings.API_V1_STR}/databases", 
 app.include_router(marketplace_router, prefix=f"{settings.API_V1_STR}/marketplace", tags=["App Store Marketplace"])
 app.include_router(terminal_router, prefix=f"{settings.API_V1_STR}/system/terminal", tags=["Terminal Console"])
 app.include_router(users_router, prefix=f"{settings.API_V1_STR}/users", tags=["User Management"])
+app.include_router(docker_router, prefix=f"{settings.API_V1_STR}/docker", tags=["Docker Administrator"])
 
 
 @app.get("/health")

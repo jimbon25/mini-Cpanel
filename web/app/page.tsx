@@ -15,6 +15,7 @@ import Sidebar, { TabType } from "./components/Sidebar";
 import MarketplaceTab from "./components/Marketplace/MarketplaceTab";
 import TerminalTab from "./components/Terminal/TerminalTab";
 import UsersTab from "./components/Users/UsersTab";
+import DockerTab from "./components/Docker/DockerTab";
 import CommandPalette from "./components/CommandPalette";
 
 import { apiClient } from "@/app/utils/apiClient";
@@ -113,8 +114,8 @@ export default function App() {
     if (!token) return;
     const allowedTabs: Record<string, TabType[]> = {
       viewer: ["dashboard"],
-      developer: ["dashboard", "files", "projects", "apps", "cron"],
-      super_admin: ["dashboard", "files", "projects", "apps", "cron", "databases", "backup", "settings", "terminal", "users"],
+      developer: ["dashboard", "files", "projects", "apps", "cron", "docker"],
+      super_admin: ["dashboard", "files", "projects", "apps", "cron", "databases", "backup", "settings", "terminal", "users", "docker"],
     };
     const roleAllowed = allowedTabs[userRole] || ["dashboard"];
     if (!roleAllowed.includes(activeTab)) {
@@ -427,6 +428,13 @@ export default function App() {
 
           {activeTab === "users" && (
             <UsersTab
+              token={token}
+              addLog={addLog}
+            />
+          )}
+
+          {activeTab === "docker" && (
+            <DockerTab
               token={token}
               addLog={addLog}
             />
