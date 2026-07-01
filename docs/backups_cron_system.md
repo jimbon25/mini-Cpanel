@@ -126,7 +126,7 @@ Retrieves server hardware stats, global cPanel logger activity feed, and setting
 ```
 
 ### 2. Read Activity Logs
-Fetches the last 50 entries recorded in the cPanel-Lite global activity logs table.
+Fetches the last 50 entries recorded in the Mini cPanel global activity logs table.
 * Endpoint: `GET /api/v1/system/activity-logs`
 
 ### 3. Get Proxy Settings

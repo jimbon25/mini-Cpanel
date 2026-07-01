@@ -1,6 +1,6 @@
-# cPanel-Lite API Documentation Overview
+# Mini cPanel API Documentation Overview
 
-Welcome to the cPanel-Lite API Documentation. The backend is built using FastAPI (Python) and serves as the orchestrator for all server operations, including project deployments, file management, database administration, custom proxy routing, and Docker container control.
+Welcome to the Mini cPanel API Documentation. The backend is built using FastAPI (Python) and serves as the orchestrator for all server operations, including project deployments, file management, database administration, custom proxy routing, and Docker container control.
 
 ---
 
