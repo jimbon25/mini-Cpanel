@@ -138,3 +138,18 @@ class Deployment(Base):
     project = relationship("Project", back_populates="deployments")
 
 
+class IngressRule(Base):
+    __tablename__ = "ingress_rules"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    domain_name = Column(String, unique=True, index=True, nullable=False)
+    target_type = Column(String, nullable=False)
+    target_value = Column(String, nullable=False)
+    max_body_size = Column(String, default="100M", nullable=False)
+    cors_enabled = Column(Boolean, default=False, nullable=False)
+    ssl_enabled = Column(Boolean, default=False, nullable=False)
+    ssl_expiry = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+

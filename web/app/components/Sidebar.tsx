@@ -1,6 +1,6 @@
 import React from "react";
 
-export type TabType = "dashboard" | "files" | "projects" | "apps" | "cron" | "backup" | "settings" | "databases" | "terminal" | "users";
+export type TabType = "dashboard" | "files" | "projects" | "apps" | "cron" | "backup" | "settings" | "databases" | "terminal" | "users" | "docker" | "ingress";
 
 interface SidebarProps {
   activeTab: TabType;
@@ -125,13 +125,33 @@ export default function Sidebar({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       )
+    },
+    {
+      id: "docker" as TabType,
+      num: "11",
+      label: "Docker Manager",
+      icon: (
+        <svg className="w-4 h-4 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+      )
+    },
+    {
+      id: "ingress" as TabType,
+      num: "12",
+      label: "Ingress Router",
+      icon: (
+        <svg className="w-4 h-4 text-current" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4-4m-4 4l4 4" />
+        </svg>
+      )
     }
   ];
 
   const allowedTabs: Record<string, TabType[]> = {
     viewer: ["dashboard"],
-    developer: ["dashboard", "files", "projects", "apps", "cron"],
-    super_admin: ["dashboard", "files", "projects", "apps", "cron", "databases", "backup", "settings", "terminal", "users"],
+    developer: ["dashboard", "files", "projects", "apps", "cron", "docker", "ingress"],
+    super_admin: ["dashboard", "files", "projects", "apps", "cron", "databases", "backup", "settings", "terminal", "users", "docker", "ingress"],
   };
   const roleAllowed = allowedTabs[userRole] || ["dashboard"];
   const filteredMenuItems = menuItems.filter((item) => roleAllowed.includes(item.id));

@@ -335,16 +335,16 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
                   return (
                     <article
                       key={c.id}
-                      className="flat-card p-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card-sem"
+                      className="flat-card p-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 border border-border-sem rounded-lg bg-card-sem text-xs"
                     >
-                      <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                      <div className="flex flex-col gap-1 flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span
                             className={`w-2 h-2 rounded-full ${
                               running ? "bg-green-500 animate-pulse" : "bg-neutral-500"
                             }`}
                           ></span>
-                          <h3 className="font-mono text-sm font-bold text-foreground truncate">{c.name}</h3>
+                          <h3 className="font-mono text-xs font-bold text-foreground truncate">{c.name}</h3>
                           <span className="text-[10px] text-muted-sem font-mono truncate max-w-xs">({c.image})</span>
                         </div>
                         
@@ -371,12 +371,11 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
                         )}
                       </div>
 
-                      {/* Control Panel Actions */}
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 select-none">
                         {running ? (
                           <button
                             onClick={() => handleContainerAction(c.id, c.name, "stop")}
-                            className="border border-border-sem hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-mono p-1.5 px-3 rounded text-amber-500 hover:text-amber-600"
+                            className="border border-border-sem hover:bg-amber-500/10 text-amber-500 rounded px-2 py-0.5 text-[11px] font-mono transition-all"
                             title="Stop Container"
                           >
                             STOP
@@ -384,7 +383,7 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
                         ) : (
                           <button
                             onClick={() => handleContainerAction(c.id, c.name, "start")}
-                            className="border border-border-sem hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-mono p-1.5 px-3 rounded text-green-500 hover:text-green-600"
+                            className="border border-border-sem hover:bg-green-500/10 text-green-500 rounded px-2 py-0.5 text-[11px] font-mono transition-all"
                             title="Start Container"
                           >
                             START
@@ -392,21 +391,21 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
                         )}
                         <button
                           onClick={() => handleContainerAction(c.id, c.name, "restart")}
-                          className="border border-border-sem hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-mono p-1.5 px-3 rounded text-cobalt"
+                          className="border border-border-sem hover:bg-indigo-500/10 text-indigo-500 rounded px-2 py-0.5 text-[11px] font-mono transition-all"
                           title="Restart Container"
                         >
                           RESTART
                         </button>
                         <button
                           onClick={() => handleViewLogs(c.id, c.name)}
-                          className="border border-border-sem hover:bg-neutral-100 dark:hover:bg-neutral-800 text-xs font-mono p-1.5 px-3 rounded text-neutral-400 hover:text-foreground"
+                          className="border border-border-sem hover:bg-neutral-100 dark:hover:bg-neutral-800 text-neutral-400 hover:text-white rounded px-2 py-0.5 text-[11px] font-mono transition-all"
                           title="View Logs"
                         >
                           LOGS
                         </button>
                         <button
                           onClick={() => handleContainerAction(c.id, c.name, "remove")}
-                          className="border border-border-sem hover:bg-red-500/10 text-xs font-mono p-1.5 px-3 rounded text-neutral-400 hover:text-red-500"
+                          className="border border-border-sem hover:bg-red-500/10 text-neutral-400 hover:text-red-500 rounded px-2 py-0.5 text-[11px] font-mono transition-all"
                           title="Remove Container"
                         >
                           REMOVE
@@ -425,26 +424,26 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
               <table className="w-full text-left font-mono text-xs">
                 <thead>
                   <tr className="bg-neutral-50/50 dark:bg-neutral-900/10 text-neutral-400 text-[10px] uppercase">
-                    <th className="p-4">Repository</th>
-                    <th className="p-4">Tag</th>
-                    <th className="p-4">Image ID</th>
-                    <th className="p-4">Created</th>
-                    <th className="p-4 text-right">Size</th>
+                    <th className="p-2.5">Repository</th>
+                    <th className="p-2.5">Tag</th>
+                    <th className="p-2.5">Image ID</th>
+                    <th className="p-2.5">Created</th>
+                    <th className="p-2.5 text-right">Size</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
                   {images.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-muted-sem">No Docker images found.</td>
+                      <td colSpan={5} className="p-6 text-center text-muted-sem">No Docker images found.</td>
                     </tr>
                   ) : (
                     images.map(img => (
                       <tr key={img.id} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10">
-                        <td className="p-4 font-bold text-foreground">{img.repository}</td>
-                        <td className="p-4 text-muted-sem">{img.tag}</td>
-                        <td className="p-4 text-neutral-400">{img.id.substring(0, 12)}</td>
-                        <td className="p-4 text-neutral-500">{img.created}</td>
-                        <td className="p-4 text-right font-bold">{img.size}</td>
+                        <td className="p-2.5 font-bold text-foreground">{img.repository}</td>
+                        <td className="p-2.5 text-muted-sem">{img.tag}</td>
+                        <td className="p-2.5 text-neutral-400">{img.id.substring(0, 12)}</td>
+                        <td className="p-2.5 text-neutral-500">{img.created}</td>
+                        <td className="p-2.5 text-right font-bold">{img.size}</td>
                       </tr>
                     ))
                   )}
@@ -459,20 +458,20 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
               <table className="w-full text-left font-mono text-xs">
                 <thead>
                   <tr className="bg-neutral-50/50 dark:bg-neutral-900/10 text-neutral-400 text-[10px] uppercase">
-                    <th className="p-4">Volume Name</th>
-                    <th className="p-4 text-right">Driver</th>
+                    <th className="p-2.5">Volume Name</th>
+                    <th className="p-2.5 text-right">Driver</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
                   {volumes.length === 0 ? (
                     <tr>
-                      <td colSpan={2} className="p-8 text-center text-muted-sem">No Docker volumes found.</td>
+                      <td colSpan={2} className="p-6 text-center text-muted-sem">No Docker volumes found.</td>
                     </tr>
                   ) : (
                     volumes.map(vol => (
                       <tr key={vol.name} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10">
-                        <td className="p-4 text-foreground font-bold break-all">{vol.name}</td>
-                        <td className="p-4 text-right text-muted-sem font-bold">{vol.driver}</td>
+                        <td className="p-2.5 text-foreground font-bold break-all">{vol.name}</td>
+                        <td className="p-2.5 text-right text-muted-sem font-bold">{vol.driver}</td>
                       </tr>
                     ))
                   )}
@@ -487,24 +486,24 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
               <table className="w-full text-left font-mono text-xs">
                 <thead>
                   <tr className="bg-neutral-50/50 dark:bg-neutral-900/10 text-neutral-400 text-[10px] uppercase">
-                    <th className="p-4">Network Name</th>
-                    <th className="p-4">Network ID</th>
-                    <th className="p-4">Driver</th>
-                    <th className="p-4 text-right">Scope</th>
+                    <th className="p-2.5">Network Name</th>
+                    <th className="p-2.5">Network ID</th>
+                    <th className="p-2.5">Driver</th>
+                    <th className="p-2.5 text-right">Scope</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-200 dark:divide-neutral-800">
                   {networks.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="p-8 text-center text-muted-sem">No Docker networks found.</td>
+                      <td colSpan={4} className="p-6 text-center text-muted-sem">No Docker networks found.</td>
                     </tr>
                   ) : (
                     networks.map(net => (
                       <tr key={net.id} className="hover:bg-neutral-50/30 dark:hover:bg-neutral-900/10">
-                        <td className="p-4 text-foreground font-bold">{net.name}</td>
-                        <td className="p-4 text-neutral-400">{net.id.substring(0, 12)}</td>
-                        <td className="p-4 text-muted-sem font-bold">{net.driver}</td>
-                        <td className="p-4 text-right text-neutral-500">{net.scope}</td>
+                        <td className="p-2.5 text-foreground font-bold">{net.name}</td>
+                        <td className="p-2.5 text-neutral-400">{net.id.substring(0, 12)}</td>
+                        <td className="p-2.5 text-muted-sem font-bold">{net.driver}</td>
+                        <td className="p-2.5 text-right text-neutral-500">{net.scope}</td>
                       </tr>
                     ))
                   )}
@@ -545,3 +544,4 @@ export default function DockerTab({ token, addLog }: DockerTabProps) {
     </div>
   );
 }
+

@@ -2,14 +2,17 @@
 
 A minimalist, lightweight, and self-hosted server orchestration dashboard designed to deploy and monitor personal web applications and background services.
 
-**🌐 Live Demo:** [https://demo.cpanel.dilua.site/](https://demo.cpanel.dilua.site/)
-
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge&logo=nextdotjs)](https://nextjs.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python)](https://www.python.org)
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57?style=for-the-badge&logo=sqlite)](https://www.sqlite.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
+<br />
+
+👉 **[Live Demo](https://demo.cpanel.dilua.site/)**
+
 
 <br />
 
@@ -56,6 +59,15 @@ graph TD
 7. **Backup & Recovery System**: Folder and database compression tools with scheduled automated backups, supporting local storage and remote storage configurations.
 8. **SSL/HTTPS Automation**: Automated Let's Encrypt SSL certificate issuance and renewal (via ACME/Certbot) for configured domains and subdomains pointing to the server.
 9. **System Alerting**: Integration with Telegram and Discord webhooks to dispatch notifications when hardware thresholds are exceeded or if service status changes.
+10. **Global Docker Manager**: Full visual dashboard to track all running/stopped Docker containers on the host, stream logs, monitor real-time resource utilization, view active networks/volumes, and prune dangling images.
+11. **Ingress Proxy Router**: Map custom domain routes directly to internal ports or external host addresses, write proxy server configurations dynamically, trigger service hot-reloads, and request automatic Let's Encrypt SSL certificates.
+
+---
+
+## API Documentation
+
+Complete developer reference for all FastAPI REST endpoints and WebSockets is available in the [docs/README.md](docs/README.md) file.
+
 
 ---
 
@@ -207,6 +219,15 @@ You can configure automatic redeployments whenever code is pushed to your Git re
 
 ---
 
+## Support
+
+If you find this project useful, feel free to buy me a cup of iced milk coffee:
+
+[![Saweria](https://img.shields.io/badge/Support-Saweria-orange?style=flat-square)](https://saweria.co/dimasla)
+
+---
+
 ## Support & Bug Reports
 
 If you encounter any bugs, security vulnerabilities, or have general feedback, please feel free to open a GitHub Issue or contact me directly at [luisdimas838@gmail.com](mailto:luisdimas838@gmail.com).
+
