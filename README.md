@@ -186,6 +186,36 @@ cpanel.yourdomain.com/api/* {
 
 Run Caddy to enable HTTPS automatically.
 
+
+### Option C: Portable Binary
+
+If you prefer to run Mini cPanel as a single zero-dependency executable on your VPS:
+
+#### 1. Download & Run the Binary
+Log into your Linux VPS and execute the following:
+
+```bash
+# Download the latest Linux x86_64 binary
+wget https://github.com/jimbon25/mini-cpanel/releases/latest/download/mini-cpanel
+
+# Grant execute permissions
+chmod +x mini-cpanel
+
+# Start the panel (optionally pass a custom port)
+./mini-cpanel 8080
+```
+
+#### 2. Access in Browser
+Open `http://YOUR_VPS_IP:8080` in your web browser. The **Web Installation Wizard** will automatically launch to help you register your admin username and password.
+
+
+
+> [!NOTE]
+> All database settings, user accounts, and project configs are stored in a folder named `cpanel-data/` created **automatically next to the executable**. Keep this folder to retain your configuration and projects.
+
+> [!WARNING]
+> For remote VPS deployments, if the page buffers or times out, make sure you open the selected port (e.g. `8080`) in your VPS provider's firewall dashboard.
+
 ---
 
 ## GitHub Auto-Deploy Webhook Setup
@@ -230,4 +260,5 @@ If you find this project useful, feel free to buy me a cup of iced milk coffee:
 ## Support & Bug Reports
 
 If you encounter any bugs, security vulnerabilities, or have general feedback, please feel free to open a GitHub Issue or contact me directly at [luisdimas838@gmail.com](mailto:luisdimas838@gmail.com).
+
 
